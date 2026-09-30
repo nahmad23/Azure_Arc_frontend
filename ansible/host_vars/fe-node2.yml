@@ -1,0 +1,4 @@
+---
+# Standby node: takes over the virtual IP if fe-node1 or its nginx fails.
+keepalived_state: BACKUP
+keepalived_priority: 100

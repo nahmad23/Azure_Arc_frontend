@@ -1,0 +1,55 @@
+---
+# ---------------------------------------------------------------------------
+# High availability (keepalived / VRRP)
+# ---------------------------------------------------------------------------
+# Floating IP that clients (and DNS) point at. Must be a free IP in the same
+# subnet as both nodes.
+frontend_vip: 10.0.1.100
+frontend_vip_cidr: 24
+# NIC that carries the VIP. Leave empty to use the default-route interface.
+keepalived_interface: ""
+# 1-255, unique per VRRP cluster on the same L2 segment.
+keepalived_router_id: 51
+# Change this! Max 8 characters (VRRP PASS auth limit).
+keepalived_auth_pass: "Ch4ngeMe"
+# Unicast VRRP works on networks that block multicast (most clouds/VMware).
+keepalived_unicast: true
+
+# ---------------------------------------------------------------------------
+# Nginx / frontend
+# ---------------------------------------------------------------------------
+nginx_server_name: "_"          # e.g. app.example.com
+nginx_web_root: /var/www/frontend
+# Local directory with the built frontend (e.g. React/Angular/Vue "dist").
+# Its contents are synced to nginx_web_root on both nodes.
+frontend_src_dir: "{{ playbook_dir }}/../frontend"
+# Serve index.html for unknown paths (needed by single-page apps).
+nginx_spa_fallback: true
+
+# Optional reverse proxy for an API backend. Leave the list empty to disable.
+# Example: ["10.0.2.21:8080", "10.0.2.22:8080"]
+backend_servers: []
+backend_location: /api/
+
+# TLS: set nginx_tls_enabled and provide cert/key paths on the control node.
+nginx_tls_enabled: false
+nginx_tls_cert_src: ""
+nginx_tls_key_src: ""
+
+# Open firewall ports (firewalld on RHEL-family, ufw on Debian-family).
+manage_firewall: true
+
+# ---------------------------------------------------------------------------
+# Azure Arc (optional): onboard nodes with azcmagent if not already connected.
+# ---------------------------------------------------------------------------
+azure_arc_onboard: false
+azure_arc_subscription_id: ""
+azure_arc_tenant_id: ""
+azure_arc_resource_group: ""
+azure_arc_location: "eastus"
+azure_arc_cloud: "AzureCloud"
+# Service principal used for at-scale onboarding. Keep the secret in
+# Ansible Vault (ansible-vault encrypt_string ...).
+azure_arc_sp_id: ""
+azure_arc_sp_secret: ""
+azure_arc_tags: "Role=frontend,Service=nginx"

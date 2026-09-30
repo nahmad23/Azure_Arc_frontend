@@ -1,0 +1,111 @@
+---
+- name: Install nginx (RedHat family)
+  ansible.builtin.dnf:
+    name: nginx
+    state: present
+  when: ansible_os_family == "RedHat"
+
+- name: Install nginx (Debian family)
+  ansible.builtin.apt:
+    name: nginx
+    state: present
+    update_cache: true
+  when: ansible_os_family == "Debian"
+
+- name: Remove distro default site (Debian family)
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  when: ansible_os_family == "Debian"
+  notify: Reload nginx
+
+# Our site is the default_server; drop that flag from the distro's sample server.
+- name: Remove default_server flag from stock nginx.conf (RedHat family)
+  ansible.builtin.replace:
+    path: /etc/nginx/nginx.conf
+    regexp: '(listen\s+\S+)\s+default_server;'
+    replace: '\g<1>;'
+  when: ansible_os_family == "RedHat"
+  notify: Reload nginx
+
+- name: Allow nginx to proxy to the backend (SELinux)
+  ansible.posix.seboolean:
+    name: httpd_can_network_connect
+    state: true
+    persistent: true
+  when:
+    - backend_servers | length > 0
+    - ansible_selinux is defined
+    - ansible_selinux.status | default('disabled') == "enabled"
+
+- name: Create web root
+  ansible.builtin.file:
+    path: "{{ nginx_web_root }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Deploy frontend build
+  ansible.posix.synchronize:
+    src: "{{ frontend_src_dir }}/"
+    dest: "{{ nginx_web_root }}/"
+    delete: true
+    rsync_opts:
+      - "--chmod=D755,F644"
+      - "--exclude=.gitkeep"
+
+- name: Restore SELinux context on web root
+  ansible.builtin.command: restorecon -R {{ nginx_web_root }}
+  when:
+    - ansible_selinux is defined
+    - ansible_selinux.status | default('disabled') == "enabled"
+  changed_when: false
+
+- name: Deploy TLS certificate and key
+  when: nginx_tls_enabled | bool
+  block:
+    - name: Create TLS directory
+      ansible.builtin.file:
+        path: "{{ nginx_tls_dir }}"
+        state: directory
+        mode: "0750"
+
+    - name: Copy certificate
+      ansible.builtin.copy:
+        src: "{{ nginx_tls_cert_src }}"
+        dest: "{{ nginx_tls_dir }}/frontend.crt"
+        mode: "0644"
+      notify: Reload nginx
+
+    - name: Copy private key
+      ansible.builtin.copy:
+        src: "{{ nginx_tls_key_src }}"
+        dest: "{{ nginx_tls_dir }}/frontend.key"
+        mode: "0600"
+      notify: Reload nginx
+
+- name: Configure frontend site
+  ansible.builtin.template:
+    src: frontend.conf.j2
+    dest: "{{ nginx_site_file }}"
+    mode: "0644"
+  notify: Reload nginx
+
+- name: Start and enable nginx
+  ansible.builtin.service:
+    name: nginx
+    state: started
+    enabled: true
+
+- name: Apply pending nginx changes now
+  ansible.builtin.meta: flush_handlers
+
+- name: Verify nginx health endpoint on this node
+  ansible.builtin.uri:
+    url: "http://127.0.0.1/healthz"
+    status_code: 200
+  register: nginx_health
+  retries: 5
+  delay: 2
+  until: nginx_health.status == 200

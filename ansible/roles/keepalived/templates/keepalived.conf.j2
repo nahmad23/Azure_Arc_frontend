@@ -1,0 +1,49 @@
+# {{ ansible_managed }}
+global_defs {
+    router_id {{ inventory_hostname }}
+    enable_script_security
+    script_user root
+}
+
+vrrp_script chk_nginx {
+    script "/usr/local/bin/check_nginx.sh"
+    interval 2
+    timeout 3
+    fall 2
+    rise 2
+    # Priority gap between nodes is 50, so a failed check always hands over.
+    weight -60
+}
+
+vrrp_instance FRONTEND_VIP {
+    state {{ keepalived_state }}
+    interface {{ keepalived_iface }}
+    virtual_router_id {{ keepalived_router_id }}
+    priority {{ keepalived_priority }}
+    advert_int 1
+    garp_master_delay 1
+
+    authentication {
+        auth_type PASS
+        auth_pass {{ keepalived_auth_pass[:8] }}
+    }
+
+{% if keepalived_unicast | bool %}
+    unicast_src_ip {{ ansible_default_ipv4.address }}
+    unicast_peer {
+{% for peer in groups['frontend'] | difference([inventory_hostname]) %}
+        {{ hostvars[peer].ansible_default_ipv4.address }}
+{% endfor %}
+    }
+
+{% endif %}
+    virtual_ipaddress {
+        {{ frontend_vip }}/{{ frontend_vip_cidr }} dev {{ keepalived_iface }}
+    }
+
+    track_script {
+        chk_nginx
+    }
+
+    notify /usr/local/bin/keepalived_notify.sh
+}

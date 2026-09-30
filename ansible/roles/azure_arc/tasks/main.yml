@@ -1,0 +1,62 @@
+---
+- name: Check for an existing Azure Arc agent
+  ansible.builtin.command: azcmagent show --json
+  register: azure_arc_show
+  changed_when: false
+  failed_when: false
+
+- name: Determine Arc connection state
+  ansible.builtin.set_fact:
+    azure_arc_connected: >-
+      {{ azure_arc_show.rc == 0 and
+         (azure_arc_show.stdout | from_json).status | default('') == 'Connected' }}
+
+- name: Onboard node to Azure Arc
+  when: not azure_arc_connected | bool
+  block:
+    - name: Require onboarding settings
+      ansible.builtin.assert:
+        that:
+          - azure_arc_subscription_id | length > 0
+          - azure_arc_tenant_id | length > 0
+          - azure_arc_resource_group | length > 0
+          - azure_arc_sp_id | length > 0
+          - azure_arc_sp_secret | length > 0
+        fail_msg: "Set the azure_arc_* variables in group_vars/frontend.yml (secret via Ansible Vault)."
+
+    - name: Download Connected Machine agent installer
+      ansible.builtin.get_url:
+        url: "{{ azure_arc_install_script_url }}"
+        dest: /tmp/install_linux_azcmagent.sh
+        mode: "0700"
+
+    - name: Install Connected Machine agent
+      ansible.builtin.command: bash /tmp/install_linux_azcmagent.sh
+      args:
+        creates: /usr/bin/azcmagent
+
+    - name: Connect node to Azure Arc
+      ansible.builtin.command:
+        argv:
+          - azcmagent
+          - connect
+          - --service-principal-id
+          - "{{ azure_arc_sp_id }}"
+          - --service-principal-secret
+          - "{{ azure_arc_sp_secret }}"
+          - --tenant-id
+          - "{{ azure_arc_tenant_id }}"
+          - --subscription-id
+          - "{{ azure_arc_subscription_id }}"
+          - --resource-group
+          - "{{ azure_arc_resource_group }}"
+          - --location
+          - "{{ azure_arc_location }}"
+          - --cloud
+          - "{{ azure_arc_cloud }}"
+          - --resource-name
+          - "{{ inventory_hostname }}"
+          - --tags
+          - "{{ azure_arc_tags }}"
+      no_log: true
+      changed_when: true

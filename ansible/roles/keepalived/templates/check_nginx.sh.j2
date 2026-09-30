@@ -1,0 +1,7 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Exit non-zero when nginx on this node cannot serve traffic; keepalived then
+# lowers this node's priority so the peer takes over the VIP.
+pidof nginx >/dev/null || exit 1
+curl -fsS --max-time 2 -o /dev/null http://127.0.0.1/healthz || exit 1
+exit 0

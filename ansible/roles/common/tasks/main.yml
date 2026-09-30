@@ -1,0 +1,79 @@
+---
+- name: Install base packages
+  ansible.builtin.package:
+    name:
+      - curl
+      - rsync
+    state: present
+
+- name: Allow binding to the VIP before it is assigned locally
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_nonlocal_bind
+    value: "1"
+    sysctl_file: /etc/sysctl.d/90-frontend-ha.conf
+    reload: true
+
+- name: Open firewall (firewalld)
+  when:
+    - manage_firewall | bool
+    - ansible_os_family == "RedHat"
+  block:
+    - name: Ensure firewalld is running
+      ansible.builtin.service:
+        name: firewalld
+        state: started
+        enabled: true
+
+    - name: Allow HTTP/HTTPS
+      ansible.posix.firewalld:
+        service: "{{ item }}"
+        permanent: true
+        immediate: true
+        state: enabled
+      loop: [http, https]
+
+    - name: Allow VRRP between the nodes
+      ansible.posix.firewalld:
+        rich_rule: 'rule protocol value="vrrp" accept'
+        permanent: true
+        immediate: true
+        state: enabled
+
+- name: Open firewall (ufw)
+  when:
+    - manage_firewall | bool
+    - ansible_os_family == "Debian"
+  block:
+    - name: Install ufw
+      ansible.builtin.apt:
+        name: ufw
+        state: present
+        update_cache: true
+
+    - name: Keep SSH reachable
+      community.general.ufw:
+        rule: allow
+        name: OpenSSH
+
+    - name: Allow HTTP/HTTPS
+      community.general.ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop: ["80", "443"]
+
+    - name: Enable ufw
+      community.general.ufw:
+        state: enabled
+
+    # ufw has no portable "vrrp" protocol keyword, so add raw rules (IP proto 112).
+    - name: Allow VRRP from the peer node
+      ansible.builtin.blockinfile:
+        path: /etc/ufw/before.rules
+        insertbefore: "^COMMIT"
+        marker: "# {mark} frontend-ha VRRP"
+        block: |
+          {% for peer in groups['frontend'] | difference([inventory_hostname]) %}
+          -A ufw-before-input -p 112 -s {{ hostvars[peer].ansible_default_ipv4.address }} -j ACCEPT
+          {% endfor %}
+      notify: Reload ufw

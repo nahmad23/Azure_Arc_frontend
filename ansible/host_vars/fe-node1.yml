@@ -1,0 +1,4 @@
+---
+# Primary node: holds the virtual IP while healthy.
+keepalived_state: MASTER
+keepalived_priority: 150

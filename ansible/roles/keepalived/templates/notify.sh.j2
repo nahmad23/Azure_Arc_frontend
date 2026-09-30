@@ -1,0 +1,4 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Called by keepalived as: <script> <GROUP|INSTANCE> <name> <MASTER|BACKUP|FAULT|STOP> <priority>
+logger -t keepalived-notify "VRRP ${2} on $(hostname) -> ${3} (priority ${4:-n/a}) VIP={{ frontend_vip }}"

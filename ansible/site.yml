@@ -1,0 +1,21 @@
+---
+- name: Gather facts from both frontend nodes
+  hosts: frontend
+  gather_facts: true
+  tasks:
+    - name: Require exactly two frontend nodes
+      ansible.builtin.assert:
+        that: groups['frontend'] | length == 2
+        fail_msg: "The frontend group must contain exactly two nodes."
+      run_once: true  # noqa: run-once[task]
+
+- name: Deploy highly available nginx frontend on two Linux nodes
+  hosts: frontend
+  gather_facts: false   # facts from the first play are reused (peer IPs for VRRP)
+  serial: 1             # roll one node at a time so the VIP always has a healthy owner
+  roles:
+    - role: azure_arc
+      when: azure_arc_onboard | bool
+    - role: common
+    - role: nginx
+    - role: keepalived

@@ -1,0 +1,34 @@
+---
+- name: Install keepalived
+  ansible.builtin.package:
+    name: keepalived
+    state: present
+
+- name: Resolve VRRP interface
+  ansible.builtin.set_fact:
+    keepalived_iface: "{{ keepalived_interface | default('', true) or ansible_default_ipv4.interface }}"
+
+- name: Install nginx health-check script
+  ansible.builtin.template:
+    src: check_nginx.sh.j2
+    dest: /usr/local/bin/check_nginx.sh
+    mode: "0755"
+
+- name: Install state-change notify script
+  ansible.builtin.template:
+    src: notify.sh.j2
+    dest: /usr/local/bin/keepalived_notify.sh
+    mode: "0755"
+
+- name: Configure keepalived
+  ansible.builtin.template:
+    src: keepalived.conf.j2
+    dest: /etc/keepalived/keepalived.conf
+    mode: "0640"
+  notify: Reload keepalived
+
+- name: Start and enable keepalived
+  ansible.builtin.service:
+    name: keepalived
+    state: started
+    enabled: true

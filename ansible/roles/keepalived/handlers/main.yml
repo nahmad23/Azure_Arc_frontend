@@ -1,0 +1,6 @@
+---
+# Reload (SIGHUP) instead of restart so a config change doesn't drop the VIP.
+- name: Reload keepalived
+  ansible.builtin.service:
+    name: keepalived
+    state: reloaded
