@@ -7,10 +7,10 @@ servers** (Azure Arc-enabled) and makes it highly available with a
 ```
                     clients / DNS (app.example.com -> VIP)
                                    |
-                        VIP 10.0.1.100 (floating)
+                        VIP 10.192.2.153 (floating)
                      ______________|______________
                     |                             |
-          fe-node1 (MASTER, prio 150)   fe-node2 (BACKUP, prio 100)
+          uxus1sitaarc01 (MASTER, prio 150)   uxus1sitaarc02 (BACKUP, prio 100)
           nginx + keepalived            nginx + keepalived
                     |<------ VRRP (unicast) ----->|
                     |                             |
@@ -34,7 +34,7 @@ ansible/
   requirements.yml            # ansible.posix, community.general
   inventory/hosts.ini         # the two nodes
   group_vars/frontend.yml     # VIP, nginx, TLS, backend, Azure Arc settings
-  host_vars/fe-node{1,2}.yml  # MASTER/BACKUP state and priority
+  host_vars/uxus1sitaarc0{1,2}.yml  # MASTER/BACKUP state and priority
   roles/
     azure_arc/   # optional: install azcmagent and connect nodes to Azure Arc
     common/      # base packages, sysctl, firewall (firewalld / ufw) incl. VRRP
@@ -62,7 +62,7 @@ scripts/check-ha.sh           # check the VIP and each node
 
 ## Configure
 
-1. **Inventory** – `ansible/inventory/hosts.ini`: set `ansible_host` for `fe-node1` / `fe-node2`
+1. **Inventory** – `ansible/inventory/hosts.ini`: set `ansible_host` for `uxus1sitaarc01` / `uxus1sitaarc02`
    and `ansible_user`.
 2. **VIP and HA** – `ansible/group_vars/frontend.yml`:
    * `frontend_vip`, `frontend_vip_cidr`
@@ -97,20 +97,20 @@ The run is idempotent and only changes what differs.
 ## Verify and test failover
 
 ```bash
-scripts/check-ha.sh 10.0.1.100 10.0.1.11 10.0.1.12
-# VIP    10.0.1.100      UP   served-by=fe-node1
-# node   10.0.1.11       UP   served-by=fe-node1
-# node   10.0.1.12       UP   served-by=fe-node2
+scripts/check-ha.sh 10.192.2.153 10.192.2.150 10.192.2.149
+# VIP    10.192.2.153      UP   served-by=uxus1sitaarc01
+# node   10.192.2.150       UP   served-by=uxus1sitaarc01
+# node   10.192.2.149       UP   served-by=uxus1sitaarc02
 
-# On fe-node1: see who holds the VIP
-ip -4 addr show | grep 10.0.1.100
+# On uxus1sitaarc01: see who holds the VIP
+ip -4 addr show | grep 10.192.2.153
 
-# Simulate a failure on fe-node1
+# Simulate a failure on uxus1sitaarc01
 sudo systemctl stop nginx
-scripts/check-ha.sh 10.0.1.100 10.0.1.11 10.0.1.12    # VIP now served-by=fe-node2
+scripts/check-ha.sh 10.192.2.153 10.192.2.150 10.192.2.149    # VIP now served-by=uxus1sitaarc02
 sudo journalctl -t keepalived-notify -n 5              # state-change log on each node
 
-# Recover (the VIP moves back to fe-node1, the higher priority)
+# Recover (the VIP moves back to uxus1sitaarc01, the higher priority)
 sudo systemctl start nginx
 ```
 

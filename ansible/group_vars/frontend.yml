@@ -4,7 +4,7 @@
 # ---------------------------------------------------------------------------
 # Floating IP that clients (and DNS) point at. Must be a free IP in the same
 # subnet as both nodes.
-frontend_vip: 10.0.1.100
+frontend_vip: 10.192.2.153
 frontend_vip_cidr: 24
 # NIC that carries the VIP. Leave empty to use the default-route interface.
 keepalived_interface: ""
