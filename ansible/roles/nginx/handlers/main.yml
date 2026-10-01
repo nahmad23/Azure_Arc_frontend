@@ -1,12 +1,14 @@
 ---
-# Test first: a bad config fails the play on this node (serial: 1), so the
-# other node keeps serving and holds the VIP.
-- name: Reload nginx
+# Both handlers listen on "Reload nginx" and run in this order. A bad config
+# fails the test, so the reload is skipped and the play stops on this node
+# (serial: 1); the other node keeps serving and holds the VIP.
+- name: Test nginx configuration
   ansible.builtin.command: nginx -t
   changed_when: false
-  notify: Apply nginx reload
+  listen: Reload nginx
 
 - name: Apply nginx reload
   ansible.builtin.service:
     name: nginx
     state: reloaded
+  listen: Reload nginx
