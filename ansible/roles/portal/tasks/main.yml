@@ -85,10 +85,33 @@
   ansible.builtin.meta: flush_handlers
 
 - name: Verify portal health on this node
-  ansible.builtin.uri:
-    url: "http://127.0.0.1:{{ portal_port }}/healthz"
-    status_code: 200
-  register: portal_health
-  retries: 10
-  delay: 3
-  until: portal_health.status == 200
+  block:
+    - name: Wait for the portal to answer /healthz
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ portal_port }}/healthz"
+        status_code: 200
+      register: portal_health
+      retries: 10
+      delay: 3
+      until: portal_health.status == 200
+  rescue:
+    - name: Collect portal service status
+      ansible.builtin.command: systemctl status provisioning-portal --no-pager --full --lines=0
+      register: portal_status
+      changed_when: false
+      failed_when: false
+
+    - name: Collect portal service log
+      ansible.builtin.command: journalctl -u provisioning-portal --no-pager --lines=40 --since=-10min
+      register: portal_journal
+      changed_when: false
+      failed_when: false
+
+    - name: Portal did not start
+      ansible.builtin.fail:
+        msg: |
+          The portal is not answering on 127.0.0.1:{{ portal_port }}.
+          --- systemctl status provisioning-portal ---
+          {{ portal_status.stdout }}
+          --- journalctl -u provisioning-portal (last 40 lines) ---
+          {{ portal_journal.stdout }}
