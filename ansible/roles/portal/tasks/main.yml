@@ -39,12 +39,28 @@
       - "--exclude=requirements-dev.txt"
   notify: Restart portal
 
+# Hardened servers often set root's umask to 027/077, which would make the
+# virtualenv unreadable by the portal service user ("203/EXEC Permission denied").
+- name: Check permissions of an existing virtualenv
+  ansible.builtin.stat:
+    path: "{{ portal_root }}/venv/bin"
+  register: portal_venv_bin
+
+- name: Remove a virtualenv the service user cannot use (it is rebuilt below)
+  ansible.builtin.file:
+    path: "{{ portal_root }}/venv"
+    state: absent
+  when:
+    - portal_venv_bin.stat.exists
+    - not (portal_venv_bin.stat.roth and portal_venv_bin.stat.xoth)
+
 - name: Install Python dependencies into the virtualenv
   ansible.builtin.pip:
     requirements: "{{ portal_root }}/src/requirements.txt"
     virtualenv: "{{ portal_root }}/venv"
     virtualenv_command: "{{ portal_python }} -m venv"
     extra_args: "{{ portal_pip_extra_args | join(' ') or omit }}"
+    umask: "0022"
   environment: "{{ portal_proxy_env | default({}) }}"
   notify: Restart portal
 
