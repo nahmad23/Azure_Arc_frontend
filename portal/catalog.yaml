@@ -1,0 +1,49 @@
+# Choices offered by the provisioning form. Edit to match your environment.
+# Each `id` is what the pipeline receives; map it to your Terraform variables
+# (template name, cluster, port group / VM network, etc.).
+
+environments:
+  - {id: dev,  label: Development}
+  - {id: test, label: Test}
+  - {id: uat,  label: UAT}
+  - {id: prod, label: Production}
+
+sizes:
+  cpu: [1, 2, 4, 8, 16, 32]
+  memory_gb: [2, 4, 8, 16, 32, 64, 128]
+  os_disk_gb: {min: 40, max: 500, default: 80}
+  data_disk_gb: {min: 10, max: 4096}
+  max_data_disks: 4
+
+domains:
+  - {id: corp.example.com, label: corp.example.com}
+
+platforms:
+  vmware:
+    label: VMware vSphere
+    locations:
+      - {id: dc1-cluster01, label: "DC1 / Cluster01"}
+      - {id: dc2-cluster01, label: "DC2 / Cluster01"}
+    networks:
+      - {id: vlan110-app, label: "VLAN 110 - Application"}
+      - {id: vlan120-db,  label: "VLAN 120 - Database"}
+    images:
+      linux:
+        - {id: tpl-rhel9,   label: "RHEL 9"}
+        - {id: tpl-ubuntu2404, label: "Ubuntu 24.04 LTS"}
+      windows:
+        - {id: tpl-win2022, label: "Windows Server 2022"}
+        - {id: tpl-win2019, label: "Windows Server 2019"}
+
+  scvmm:
+    label: SCVMM / Hyper-V
+    locations:
+      - {id: hv-cloud-prod, label: "Hyper-V Cloud - Production"}
+      - {id: hv-cloud-nonprod, label: "Hyper-V Cloud - Non-Production"}
+    networks:
+      - {id: vmnet-app, label: "VM Network - Application"}
+    images:
+      linux:
+        - {id: vhdx-rhel9, label: "RHEL 9"}
+      windows:
+        - {id: vhdx-win2022, label: "Windows Server 2022"}

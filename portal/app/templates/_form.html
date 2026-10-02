@@ -1,0 +1,101 @@
+{% from "_macros.html" import select, text, field_error %}
+{% if submit_error %}<div class="alert alert-error">{{ submit_error }}</div>{% endif %}
+{% if errors %}<div class="alert alert-error">Please correct the {{ errors|length }} highlighted field{{ "s" if errors|length > 1 }}.</div>{% endif %}
+<form hx-post="/requests" hx-target="#form-area" hx-swap="innerHTML"
+      hx-disabled-elt="find button[type=submit]"
+      hx-confirm="Submit this provisioning request?"
+      hx-disinherit="*" novalidate>
+
+  <fieldset>
+    <legend>Platform and operating system</legend>
+    <div class="grid">
+      <div>
+        {{ select("platform", "Platform", catalog.platform_options, v, errors, placeholder="",
+                  attrs='hx-get="/form/platform-options" hx-target="#platform-options" hx-include="[name=platform],[name=os_family]"') }}
+      </div>
+      <div>
+        <span class="label">Operating system</span>
+        <div class="radio-row" hx-get="/form/platform-options" hx-target="#platform-options"
+             hx-trigger="change" hx-include="[name=platform],[name=os_family]">
+          {% for fam, label in [("linux", "Linux"), ("windows", "Windows")] %}
+          <label class="radio"><input type="radio" name="os_family" value="{{ fam }}"
+                 {% if v.get("os_family") == fam %}checked{% endif %}> {{ label }}</label>
+          {% endfor %}
+        </div>
+        {{ field_error(errors, "os_family") }}
+      </div>
+    </div>
+    <div id="platform-options">
+      {% include "_platform_options.html" %}
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Server</legend>
+    <div class="grid">
+      <div>
+        {{ text("hostname", "Hostname", v, errors,
+                attrs='autocomplete="off" spellcheck="false" hx-get="/form/check-hostname" hx-trigger="input changed delay:600ms, change" hx-target="#hostname-msg" hx-include="[name=os_family]"',
+                hint="Lowercase letters, digits and hyphens. Windows: max 15 characters.") }}
+        <div id="hostname-msg" aria-live="polite"></div>
+      </div>
+      <div>{{ select("environment", "Environment", catalog.environments, v, errors) }}</div>
+      <div>{{ text("application", "Application / service", v, errors) }}</div>
+      <div>{{ text("owner_email", "Owner email", v, errors, type="email") }}</div>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Size</legend>
+    <div class="grid grid-3">
+      <div>{{ select("cpu", "vCPU", catalog.cpu, v, errors, placeholder="") }}</div>
+      <div>{{ select("memory_gb", "Memory (GB)", catalog.memory_gb, v, errors, placeholder="") }}</div>
+      <div>{{ text("os_disk_gb", "OS disk (GB)", v, errors, type="number",
+                   attrs='min="%d" max="%d"'|format(catalog.os_disk_min, catalog.os_disk_max)) }}</div>
+    </div>
+    <span class="label">Data disks (GB)</span>
+    <div id="data-disks">
+      {% for size in v.get("data_disks", []) %}{% include "_disk_row.html" %}{% endfor %}
+    </div>
+    {{ field_error(errors, "data_disks") }}
+    <button type="button" class="secondary" hx-get="/form/disk-row" hx-target="#data-disks" hx-swap="beforeend">
+      + Add data disk</button>
+    <p class="hint">Up to {{ catalog.max_data_disks }} disks, {{ catalog.data_disk_min }}–{{ catalog.data_disk_max }} GB each.</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>Network</legend>
+    <div class="radio-row" hx-get="/form/ip-fields" hx-target="#ip-fields" hx-trigger="change"
+         hx-include="[name=ip_mode],[name=ip_address],[name=prefix_length],[name=gateway],[name=dns_servers]">
+      <label class="radio"><input type="radio" name="ip_mode" value="dhcp" {% if v.get("ip_mode") != "static" %}checked{% endif %}> DHCP</label>
+      <label class="radio"><input type="radio" name="ip_mode" value="static" {% if v.get("ip_mode") == "static" %}checked{% endif %}> Static IP</label>
+    </div>
+    <div id="ip-fields">{% include "_ip_fields.html" %}</div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Domain</legend>
+    <div class="radio-row" hx-get="/form/domain-fields" hx-target="#domain-fields" hx-trigger="change"
+         hx-include="[name=domain_join],[name=domain],[name=ou_path]">
+      <label class="radio"><input type="radio" name="domain_join" value="no" {% if v.get("domain_join") != "yes" %}checked{% endif %}> Workgroup / no join</label>
+      <label class="radio"><input type="radio" name="domain_join" value="yes" {% if v.get("domain_join") == "yes" %}checked{% endif %}> Join a domain</label>
+    </div>
+    <div id="domain-fields">{% include "_domain_fields.html" %}</div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Tracking</legend>
+    <div class="grid">
+      <div>{{ text("cost_center", "Cost center", v, errors) }}</div>
+      <div>{{ text("change_ticket", "Change / ticket number", v, errors, hint="Required for Production.") }}</div>
+    </div>
+    <label for="notes">Notes</label>
+    <textarea id="notes" name="notes" rows="3" maxlength="1000">{{ v.get("notes") or "" }}</textarea>
+    {{ field_error(errors, "notes") }}
+  </fieldset>
+
+  <div class="actions">
+    <button type="submit">Submit request</button>
+    <span class="htmx-indicator">Submitting…</span>
+  </div>
+</form>

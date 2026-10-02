@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ settings.app_title }}{% endblock %}</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/htmx.min.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/">{{ settings.app_title }}</a>
+      <nav>
+        <a href="/">New request</a>
+        <a href="/requests">Recent requests</a>
+      </nav>
+      <div class="user">
+        {% if user %}{{ user.name or user.email }}{% if settings.auth_mode != "none" %} · <a href="/logout">Sign out</a>{% endif %}{% endif %}
+      </div>
+    </div>
+  </header>
+  {% if settings.dry_run %}
+  <div class="banner">Dry-run mode: requests are validated but no pipeline is queued and nothing is provisioned.</div>
+  {% endif %}
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="footer">Served by {{ node }}</footer>
+</body>
+</html>

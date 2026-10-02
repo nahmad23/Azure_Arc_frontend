@@ -1,0 +1,94 @@
+---
+- name: Install Python
+  ansible.builtin.package:
+    name: "{{ portal_python_packages }}"
+    state: present
+
+- name: Create portal service account
+  ansible.builtin.user:
+    name: "{{ portal_user }}"
+    system: true
+    shell: /usr/sbin/nologin
+    home: "{{ portal_root }}"
+    create_home: false
+
+- name: Create portal directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: "{{ portal_root }}", group: root, mode: "0755"}
+    - {path: "{{ portal_root }}/src", group: root, mode: "0755"}
+    - {path: "{{ portal_config_dir }}", group: "{{ portal_user }}", mode: "0750"}
+
+- name: Deploy portal application code
+  ansible.posix.synchronize:
+    src: "{{ portal_src_dir }}/"
+    dest: "{{ portal_root }}/src/"
+    delete: true
+    rsync_opts:
+      - "--chmod=D755,F644"
+      - "--exclude=tests/"
+      - "--exclude=.venv/"
+      - "--exclude=__pycache__/"
+      - "--exclude=.pytest_cache/"
+      - "--exclude=catalog.yaml"
+      - "--exclude=requirements-dev.txt"
+  notify: Restart portal
+
+- name: Install Python dependencies into the virtualenv
+  ansible.builtin.pip:
+    requirements: "{{ portal_root }}/src/requirements.txt"
+    virtualenv: "{{ portal_root }}/venv"
+    virtualenv_command: "{{ portal_python }} -m venv"
+    extra_args: "{{ portal_pip_extra_args | join(' ') or omit }}"
+  environment: "{{ portal_proxy_env | default({}) }}"
+  notify: Restart portal
+
+- name: Deploy form catalog
+  ansible.builtin.copy:
+    src: "{{ portal_catalog_src }}"
+    dest: "{{ portal_config_dir }}/catalog.yaml"
+    owner: root
+    group: "{{ portal_user }}"
+    mode: "0640"
+  notify: Restart portal
+
+- name: Write portal settings (contains secrets)
+  ansible.builtin.template:
+    src: portal.env.j2
+    dest: "{{ portal_config_dir }}/portal.env"
+    owner: root
+    group: "{{ portal_user }}"
+    mode: "0640"
+  no_log: true
+  notify: Restart portal
+
+- name: Install systemd unit
+  ansible.builtin.template:
+    src: provisioning-portal.service.j2
+    dest: /etc/systemd/system/provisioning-portal.service
+    mode: "0644"
+  notify: Restart portal
+
+- name: Start and enable the portal
+  ansible.builtin.systemd_service:
+    name: provisioning-portal
+    state: started
+    enabled: true
+    daemon_reload: true
+
+- name: Apply pending portal changes now
+  ansible.builtin.meta: flush_handlers
+
+- name: Verify portal health on this node
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ portal_port }}/healthz"
+    status_code: 200
+  register: portal_health
+  retries: 10
+  delay: 3
+  until: portal_health.status == 200

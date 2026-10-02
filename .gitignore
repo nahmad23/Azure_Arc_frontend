@@ -2,3 +2,7 @@
 .vault_pass*
 *.key
 *.pem
+ansible/credentials/
+__pycache__/
+.pytest_cache/
+.venv/

@@ -4,6 +4,10 @@ Ansible automation that deploys the frontend on **nginx** across **two Linux
 servers** (Azure Arc-enabled) and makes it highly available with a
 **keepalived / VRRP floating virtual IP (VIP)**.
 
+The frontend is the **Server Provisioning Portal** (FastAPI + HTMX): a self-service
+form that queues an Azure DevOps pipeline, which runs Terraform to build Linux and
+Windows VMs on VMware and SCVMM/Hyper-V. See [`portal/README.md`](portal/README.md).
+
 ```
                     clients / DNS (app.example.com -> VIP)
                                    |
@@ -12,14 +16,16 @@ servers** (Azure Arc-enabled) and makes it highly available with a
                     |                             |
           uxus1sitaarc01 (MASTER, prio 150)   uxus1sitaarc02 (BACKUP, prio 100)
           nginx + keepalived            nginx + keepalived
+          portal app :8000              portal app :8000
                     |<------ VRRP (unicast) ----->|
                     |                             |
               (optional) /api/  --->  backend servers
 ```
 
 * Both nodes run nginx with the same content and config (active/passive on the VIP).
-* keepalived checks nginx every 2 s (`/usr/local/bin/check_nginx.sh` → `http://127.0.0.1/healthz`).
-  If nginx dies or stops answering on the MASTER, its priority drops by 60 (150 → 90 < 100),
+* keepalived checks nginx and the portal every 2 s (`/usr/local/bin/check_nginx.sh` →
+  `http://127.0.0.1/healthz` and `http://127.0.0.1:8000/healthz`).
+  If either dies or stops answering on the MASTER, its priority drops by 60 (150 → 90 < 100),
   and the BACKUP takes the VIP within ~3–4 s and sends gratuitous ARP.
 * The playbook runs with `serial: 1`, so upgrades roll one node at a time and the VIP
   always has a healthy owner. The nginx config is checked (`nginx -t`) before every reload.
@@ -38,9 +44,12 @@ ansible/
   roles/
     azure_arc/   # optional: install azcmagent and connect nodes to Azure Arc
     common/      # base packages, sysctl, firewall (firewalld / ufw) incl. VRRP
-    nginx/       # install nginx, deploy frontend build, site config, TLS, /healthz
-    keepalived/  # VRRP VIP + nginx health check
-frontend/                     # frontend build output (placeholder index.html)
+    portal/      # provisioning portal: venv, systemd service, settings, catalog
+    nginx/       # install nginx, reverse proxy to the portal (or static site), TLS, /healthz
+    keepalived/  # VRRP VIP + nginx/portal health check
+portal/                       # provisioning portal source (FastAPI + HTMX), catalog.yaml, tests
+pipelines/provision-vm.yml    # example Azure DevOps pipeline the portal queues
+frontend/                     # static site, used only when portal_enabled is false
 scripts/check-ha.sh           # check the VIP and each node
 ```
 

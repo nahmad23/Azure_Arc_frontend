@@ -53,3 +53,44 @@ azure_arc_cloud: "AzureCloud"
 azure_arc_sp_id: ""
 azure_arc_sp_secret: ""
 azure_arc_tags: "Role=frontend,Service=nginx"
+
+# ---------------------------------------------------------------------------
+# Server provisioning portal (FastAPI + HTMX), proxied by nginx on both nodes
+# ---------------------------------------------------------------------------
+# When true, nginx sends all traffic to the portal instead of the static site.
+portal_enabled: true
+portal_app_title: "Server Provisioning Portal"
+# Same value on both nodes (generated once on the controller and reused), so
+# sessions survive a VIP failover.
+portal_secret_key: "{{ lookup('ansible.builtin.password', playbook_dir + '/credentials/portal_secret_key', length=48, chars=['ascii_letters', 'digits']) }}"
+
+# Start in dry-run: the form works end to end but no pipeline is queued.
+# Set to false once the Azure DevOps settings below are filled in.
+portal_dry_run: true
+
+# Azure DevOps pipeline to queue (see pipelines/provision-vm.yml).
+portal_ado_org_url: ""            # https://dev.azure.com/<org> or https://<ado-server>/<collection>
+portal_ado_project: ""
+portal_ado_pipeline_id: ""        # number from the pipeline URL (...?definitionId=<id>)
+portal_ado_branch: "refs/heads/main"
+portal_ado_auth: pat              # pat | service_principal
+# Keep secrets in Ansible Vault: ansible-vault encrypt_string '<value>' --name portal_ado_pat
+portal_ado_pat: ""
+portal_ado_tenant_id: ""
+portal_ado_client_id: ""
+portal_ado_client_secret: ""
+portal_ado_ca_bundle: ""          # CA file on the nodes, for an on-prem ADO server with internal CA
+
+# User sign-in. "entra" needs an app registration and HTTPS (nginx_tls_enabled).
+# "none" is only accepted by the portal while portal_dry_run is true.
+portal_auth_mode: none            # entra | none
+portal_entra_tenant_id: ""
+portal_entra_client_id: ""
+portal_entra_client_secret: ""
+portal_entra_redirect_uri: ""     # https://<portal-dns-name>/auth/callback
+portal_allowed_groups: []         # Entra group object IDs or app role names
+
+# Outbound proxy for pip and for calls to Azure DevOps / Entra ID, if needed.
+# portal_proxy_env:
+#   HTTPS_PROXY: http://proxy.example.com:8080
+#   NO_PROXY: localhost,127.0.0.1,.corp.example.com

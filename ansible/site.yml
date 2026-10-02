@@ -17,5 +17,7 @@
     - role: azure_arc
       when: azure_arc_onboard | bool
     - role: common
+    - role: portal
+      when: portal_enabled | bool
     - role: nginx
     - role: keepalived

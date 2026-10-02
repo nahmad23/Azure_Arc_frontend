@@ -1,7 +1,11 @@
 #!/bin/bash
 # {{ ansible_managed }}
-# Exit non-zero when nginx on this node cannot serve traffic; keepalived then
-# lowers this node's priority so the peer takes over the VIP.
+# Exit non-zero when this node cannot serve traffic; keepalived then lowers
+# this node's priority so the peer takes over the VIP.
 pidof nginx >/dev/null || exit 1
 curl -fsS --max-time 2 -o /dev/null http://127.0.0.1/healthz || exit 1
+{% if portal_enabled | default(false) | bool %}
+# The portal app behind nginx must be up too.
+curl -fsS --max-time 2 -o /dev/null http://127.0.0.1:{{ portal_port | default(8000) }}/healthz || exit 1
+{% endif %}
 exit 0

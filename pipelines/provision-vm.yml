@@ -1,0 +1,108 @@
+# Example provisioning pipeline queued by the portal.
+#
+# The portal calls the Pipelines "Run" REST API with these parameters. Keep the
+# parameter names in sync with portal/app/ado.py (template_parameters).
+# Adapt the Terraform steps to your existing code layout, backend and agents.
+
+name: $(Date:yyyyMMdd)$(Rev:.r)_${{ parameters.hostname }}   # shown in the portal's request list
+
+trigger: none
+pr: none
+
+parameters:
+  - name: platform
+    type: string
+    values: [vmware, scvmm]
+  - name: osFamily
+    type: string
+    values: [linux, windows]
+  - name: hostname
+    type: string
+  - name: environment
+    type: string
+    values: [dev, test, uat, prod]
+  - name: requestedBy
+    type: string
+  - name: requestJson   # full validated request (JSON); written to request.auto.tfvars.json
+    type: string
+
+variables:
+  - group: vm-provisioning          # vCenter / SCVMM credentials, Terraform backend settings
+  - name: tfDir
+    value: terraform/${{ parameters.platform }}
+  - ${{ if eq(parameters.platform, 'scvmm') }}:
+      - name: agentPool
+        value: SCVMM-Agents         # agents that can reach SCVMM (WinRM)
+  - ${{ else }}:
+      - name: agentPool
+        value: VMware-Agents        # agents that can reach vCenter
+
+stages:
+  - stage: Plan
+    jobs:
+      - job: Plan
+        pool:
+          name: ${{ variables.agentPool }}
+        steps:
+          - checkout: self
+
+          # Parameters are passed through environment variables, never pasted into
+          # script text, so user-entered values cannot inject shell commands.
+          - bash: |
+              set -euo pipefail
+              if [[ ! "$VM_HOSTNAME" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]]; then
+                echo "##vso[task.logissue type=error]Invalid hostname: $VM_HOSTNAME"; exit 1
+              fi
+              printf '%s' "$REQUEST_JSON" | python3 -c '
+              import json, sys
+              req = json.load(sys.stdin)
+              assert req["hostname"] == sys.argv[1], "hostname mismatch"
+              json.dump(req, open("request.auto.tfvars.json", "w"), indent=2)
+              ' "$VM_HOSTNAME"
+              echo "Requested by: $REQUESTED_BY"
+              cat request.auto.tfvars.json
+            displayName: Validate request and write tfvars
+            workingDirectory: $(tfDir)
+            env:
+              REQUEST_JSON: ${{ parameters.requestJson }}
+              VM_HOSTNAME: ${{ parameters.hostname }}
+              REQUESTED_BY: ${{ parameters.requestedBy }}
+
+          # One state file per VM so parallel requests never lock each other.
+          - bash: |
+              set -euo pipefail
+              terraform init -input=false -backend-config="key=vms/${VM_ENV}/${VM_HOSTNAME}.tfstate"
+              terraform plan -input=false -out=tfplan
+            displayName: Terraform plan
+            workingDirectory: $(tfDir)
+            env:
+              VM_ENV: ${{ parameters.environment }}
+              VM_HOSTNAME: ${{ parameters.hostname }}
+              # Map secrets from the variable group, e.g.:
+              # TF_VAR_vsphere_password: $(vsphere-password)
+
+          - publish: $(tfDir)
+            artifact: tfplan
+            displayName: Publish plan
+
+  - stage: Apply
+    dependsOn: Plan
+    jobs:
+      # Add "Approvals and checks" to the vm-provisioning-prod environment in
+      # Azure DevOps to require sign-off for Production requests.
+      - deployment: Apply
+        environment: vm-provisioning-${{ parameters.environment }}
+        pool:
+          name: ${{ variables.agentPool }}
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: current
+                  artifact: tfplan
+                - bash: |
+                    set -euo pipefail
+                    chmod -R u+x .terraform/providers 2>/dev/null || true
+                    terraform apply -input=false tfplan
+                  displayName: Terraform apply
+                  workingDirectory: $(Pipeline.Workspace)/tfplan

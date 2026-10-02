@@ -1,0 +1,17 @@
+---
+portal_root: /opt/provisioning-portal
+portal_config_dir: /etc/provisioning-portal
+portal_user: portal
+portal_port: 8000
+portal_src_dir: "{{ playbook_dir }}/../portal"
+portal_catalog_src: "{{ portal_src_dir }}/catalog.yaml"
+
+# Python 3.10+ is required. RHEL 9 ships 3.9 as python3, so use python3.11 there.
+portal_python: "{{ 'python3.11' if ansible_os_family == 'RedHat' else 'python3' }}"
+portal_python_packages: >-
+  {{ ['python3.11', 'python3.11-pip'] if ansible_os_family == 'RedHat'
+     else ['python3', 'python3-venv', 'python3-pip'] }}
+# e.g. ["--index-url", "https://nexus.example.com/repository/pypi/simple"]
+portal_pip_extra_args: []
+# The in-memory dry-run store only works with a single worker.
+portal_workers: "{{ 1 if portal_dry_run | bool else 2 }}"

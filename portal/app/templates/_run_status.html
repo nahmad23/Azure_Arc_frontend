@@ -1,0 +1,12 @@
+{% from "_macros.html" import status_badge %}
+{% set rid = run.id if run else run_id %}
+<div id="run-status" class="run-status"
+     {% if not run or not run.done %}hx-get="/requests/{{ rid }}/status" hx-trigger="load delay:10s" hx-swap="outerHTML"{% endif %}>
+  {% if error %}
+    <p class="field-error">Could not read the run status: {{ error }} (retrying)</p>
+  {% else %}
+    <p>Pipeline run <strong>#{{ run.id }}</strong> {{ run.name }}: {{ status_badge(run.status) }}
+      {% if run.web_url %}· <a href="{{ run.web_url }}" target="_blank" rel="noopener">Open in Azure DevOps</a>{% endif %}</p>
+    {% if not run.done %}<p class="hint">This status refreshes automatically. Production requests may wait for approval in Azure DevOps.</p>{% endif %}
+  {% endif %}
+</div>

@@ -1,0 +1,11 @@
+{% from "_macros.html" import text %}
+{% if v.get("ip_mode") == "static" %}
+<div class="grid grid-4">
+  <div>{{ text("ip_address", "IP address", v, errors, attrs='placeholder="10.192.10.25"') }}</div>
+  <div>{{ text("prefix_length", "Prefix length", v, errors, type="number", attrs='min="8" max="30" placeholder="24"') }}</div>
+  <div>{{ text("gateway", "Gateway", v, errors, attrs='placeholder="10.192.10.1"') }}</div>
+  <div>{{ text("dns_servers", "DNS servers", v, errors, attrs='placeholder="10.192.0.10, 10.192.0.11"') }}</div>
+</div>
+{% else %}
+<p class="hint">The address is assigned by DHCP / IPAM on the selected network.</p>
+{% endif %}

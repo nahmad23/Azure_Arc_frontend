@@ -1,0 +1,23 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Server Provisioning Portal (FastAPI)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User={{ portal_user }}
+Group={{ portal_user }}
+WorkingDirectory={{ portal_root }}/src
+EnvironmentFile={{ portal_config_dir }}/portal.env
+ExecStart={{ portal_root }}/venv/bin/uvicorn app.main:create_app --factory \
+    --host 127.0.0.1 --port {{ portal_port }} --workers {{ portal_workers }} \
+    --proxy-headers --forwarded-allow-ips 127.0.0.1 --no-server-header
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

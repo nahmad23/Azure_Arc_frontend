@@ -1,0 +1,6 @@
+---
+- name: Restart portal
+  ansible.builtin.systemd_service:
+    name: provisioning-portal
+    state: restarted
+    daemon_reload: true

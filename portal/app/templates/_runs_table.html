@@ -1,0 +1,20 @@
+{% from "_macros.html" import status_badge %}
+{% if error %}<div class="alert alert-error">Could not load runs: {{ error }}</div>
+{% elif not runs %}<p>No provisioning runs yet.</p>
+{% else %}
+<table class="runs">
+  <thead><tr><th>Run</th><th>Name</th><th>Status</th><th>Started (UTC)</th><th>Finished (UTC)</th><th></th></tr></thead>
+  <tbody>
+  {% for r in runs %}
+    <tr>
+      <td>#{{ r.id }}</td>
+      <td>{{ r.name }}</td>
+      <td>{{ status_badge(r.status) }}</td>
+      <td>{{ r.created.strftime("%Y-%m-%d %H:%M") if r.created else "" }}</td>
+      <td>{{ r.finished.strftime("%Y-%m-%d %H:%M") if r.finished else "" }}</td>
+      <td>{% if r.web_url %}<a href="{{ r.web_url }}" target="_blank" rel="noopener">Azure DevOps</a>{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
