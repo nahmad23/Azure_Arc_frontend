@@ -2,41 +2,64 @@
 import ipaddress
 import re
 from dataclasses import asdict, dataclass, field
+from datetime import date
 
 from .catalog import Catalog
 
-HOSTNAME_RE = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
+HOSTNAME_RE = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$")
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 # Windows NetBIOS names are limited to 15 characters.
 MAX_HOSTNAME = {"windows": 15, "linux": 63}
+CUSTOM = "custom"
 
 
 @dataclass
 class ProvisionRequest:
-    platform: str
-    os_family: str
-    os_image: str
-    hostname: str
+    # 1. Request information
+    requester_name: str
+    requester_email: str
+    department: str
     environment: str
+    request_type: str
+    source_server: str
+    # 2. Server details
+    hostname: str
+    platform: str
+    os: str
+    os_family: str
+    os_template: str
     location: str
-    network: str
+    datacenter: str
+    server_role: str
+    application: str
+    business_owner: str
+    technical_owner: str
+    # 3. Compute resources
     cpu: int
     memory_gb: int
     os_disk_gb: int
-    data_disks_gb: list[int] = field(default_factory=list)
-    ip_mode: str = "dhcp"
-    ip_address: str = ""
-    prefix_length: int | None = None
-    gateway: str = ""
-    dns_servers: list[str] = field(default_factory=list)
-    domain_join: bool = False
-    domain: str = ""
-    ou_path: str = ""
-    application: str = ""
-    owner_email: str = ""
-    cost_center: str = ""
-    change_ticket: str = ""
-    notes: str = ""
+    additional_disk_gb: int | None
+    disk_type: str
+    network: str
+    vlan: str
+    ip_assignment: str
+    ip_address: str
+    prefix_length: int | None
+    gateway: str
+    # 4. Access & security
+    domain_join: bool
+    domain: str
+    ad_groups: list[str]
+    security: dict[str, bool]
+    # 5. Automation options
+    automation: dict[str, bool]
+    # 6. Approval / change information
+    business_justification: str
+    change_ticket: str
+    approver: str
+    planned_date: str
+    required_by_date: str
+    comments: str
     requested_by: str = ""
 
     def to_dict(self) -> dict:
@@ -51,161 +74,229 @@ def check_hostname(hostname: str, os_family: str) -> str | None:
     if len(hostname) > limit:
         return f"Must be at most {limit} characters for {os_family.title() or 'this OS'}."
     if not HOSTNAME_RE.match(hostname):
-        return "Use lowercase letters, digits and hyphens; must not start or end with a hyphen."
+        return "Use letters, digits and hyphens only; must not start or end with a hyphen."
     if hostname.isdigit():
         return "Hostname cannot be all digits."
     return None
 
 
-def _int(value: str, name: str, errors: dict) -> int | None:
+def _date(value: str) -> date | None:
     try:
-        return int(str(value).strip())
-    except (TypeError, ValueError):
-        errors[name] = "Enter a whole number."
+        return date.fromisoformat(value)
+    except ValueError:
         return None
 
 
-def parse_request(form, catalog: Catalog, requested_by: str) -> tuple[ProvisionRequest | None, dict[str, str]]:
+def parse_request(form, catalog: Catalog, user: dict, today: date | None = None
+                  ) -> tuple[ProvisionRequest | None, dict[str, str]]:
     """Validate raw form data against the catalog.
 
-    `form` is a Starlette FormData (supports .get and .getlist).
+    `form` is a Starlette FormData (supports .get and .getlist). `user` is the
+    signed-in user; when sign-in is disabled the requester fields come from the form.
     Returns (request, {}) on success or (None, {field: message}) on failure.
     """
+    today = today or date.today()
     errors: dict[str, str] = {}
-    get = lambda k: (form.get(k) or "").strip()  # noqa: E731
 
-    platform = get("platform")
-    os_family = get("os_family")
-    if platform not in catalog.platforms:
-        errors["platform"] = "Choose a platform."
-    if os_family not in ("linux", "windows"):
-        errors["os_family"] = "Choose Linux or Windows."
+    def get(key: str) -> str:
+        return (form.get(key) or "").strip()
 
-    os_image = get("os_image")
-    if not errors.get("platform") and not errors.get("os_family"):
-        if os_image not in {o.id for o in catalog.images(platform, os_family)}:
-            errors["os_image"] = "Choose an OS image."
+    def require(key: str, valid: set[str], message: str) -> str:
+        value = get(key)
+        if value not in valid:
+            errors[key] = message
+        return value
 
-    hostname = get("hostname").lower()
-    if msg := check_hostname(hostname, os_family):
+    def require_text(key: str, label: str, limit: int) -> str:
+        value = get(key)
+        if not value:
+            errors[key] = f"{label} is required."
+        elif len(value) > limit:
+            errors[key] = f"At most {limit} characters."
+        return value
+
+    def optional_text(key: str, limit: int) -> str:
+        value = get(key)
+        if len(value) > limit:
+            errors[key] = f"At most {limit} characters."
+        return value
+
+    # --- 1. Request information --------------------------------------------
+    if user.get("oid"):  # signed in: never trust the form for identity
+        requester_name, requester_email = user.get("name", ""), user.get("email", "")
+    else:
+        requester_name = require_text("requester_name", "Requester name", 100)
+        requester_email = get("requester_email")
+        if not EMAIL_RE.match(requester_email):
+            errors["requester_email"] = "Enter a valid email address."
+    department = require("department", catalog.ids(catalog.departments), "Choose a department.")
+    environment = require("environment", catalog.ids(catalog.environments), "Choose an environment.")
+    request_type = require("request_type", catalog.ids(catalog.request_types), "Choose a request type.")
+    source_server = ""
+    if request_type in ("rebuild", "clone"):
+        source_server = get("source_server")
+        if msg := check_hostname(source_server, "linux"):
+            errors["source_server"] = (
+                "Enter the existing server to " + request_type + "." if not source_server else msg
+            )
+
+    # --- 2. Server details -------------------------------------------------
+    os_id = require("os", {o.id for o in catalog.operating_systems}, "Choose an operating system.")
+    os_obj = catalog.os(os_id)
+    os_family = os_obj.family if os_obj else ""
+    hostname = get("hostname")
+    if msg := check_hostname(hostname, os_family or "linux"):
         errors["hostname"] = msg
 
-    environment = get("environment")
-    if environment not in {e.id for e in catalog.environments}:
-        errors["environment"] = "Choose an environment."
+    platform = get("platform")
+    os_template = ""
+    if platform not in catalog.platforms:
+        errors["platform"] = "Choose an infrastructure platform."
+    elif os_obj:
+        os_template = catalog.platforms[platform].images.get(os_id, "")
+        if not os_template:
+            errors["platform"] = f"{os_obj.label} is not available on {catalog.platforms[platform].label}."
 
-    location = get("location")
-    if location not in {o.id for o in catalog.locations(platform)}:
-        errors["location"] = "Choose a location."
-    network = get("network")
-    if network not in {o.id for o in catalog.networks(platform)}:
-        errors["network"] = "Choose a network."
+    location = require("location", catalog.ids(catalog.locations), "Choose a server location.")
+    datacenter = require("datacenter", catalog.ids(catalog.datacenters(location)), "Choose a datacenter.")
+    server_role = require("server_role", catalog.ids(catalog.server_roles), "Choose a server role.")
+    application = require_text("application", "Application name", 64)
+    business_owner = require_text("business_owner", "Business owner", 100)
+    technical_owner = require_text("technical_owner", "Technical owner", 100)
 
-    cpu = _int(get("cpu"), "cpu", errors)
-    if cpu is not None and cpu not in catalog.cpu:
-        errors["cpu"] = "Choose a CPU count from the list."
-    memory = _int(get("memory_gb"), "memory_gb", errors)
-    if memory is not None and memory not in catalog.memory_gb:
-        errors["memory_gb"] = "Choose a memory size from the list."
-    os_disk = _int(get("os_disk_gb"), "os_disk_gb", errors)
-    if os_disk is not None and not catalog.os_disk_min <= os_disk <= catalog.os_disk_max:
-        errors["os_disk_gb"] = f"Must be between {catalog.os_disk_min} and {catalog.os_disk_max} GB."
+    # --- 3. Compute resources ----------------------------------------------
+    cpu = 0
+    cpu_choice = get("cpu")
+    if cpu_choice == CUSTOM:
+        try:
+            cpu = int(get("cpu_custom"))
+            if not catalog.custom_cpu_min <= cpu <= catalog.custom_cpu_max:
+                raise ValueError
+        except ValueError:
+            errors["cpu_custom"] = f"Enter a whole number from {catalog.custom_cpu_min} to {catalog.custom_cpu_max}."
+    elif cpu_choice.isdigit() and int(cpu_choice) in catalog.cpu:
+        cpu = int(cpu_choice)
+    else:
+        errors["cpu"] = "Choose a CPU count."
 
-    data_disks: list[int] = []
-    raw_disks = [d.strip() for d in form.getlist("data_disk_gb") if d and d.strip()]
-    if len(raw_disks) > catalog.max_data_disks:
-        errors["data_disks"] = f"At most {catalog.max_data_disks} data disks."
-    for d in raw_disks:
-        size = _int(d, "data_disks", errors)
-        if size is None:
-            break
-        if not catalog.data_disk_min <= size <= catalog.data_disk_max:
-            errors["data_disks"] = (
-                f"Each data disk must be between {catalog.data_disk_min} and {catalog.data_disk_max} GB."
+    memory = get("memory_gb")
+    if not (memory.isdigit() and int(memory) in catalog.memory_gb):
+        errors["memory_gb"] = "Choose a memory size."
+    os_disk = get("os_disk_gb")
+    if not (os_disk.isdigit() and int(os_disk) in catalog.os_disk_gb):
+        errors["os_disk_gb"] = "Choose an OS disk size."
+
+    additional_disk: int | None = None
+    if raw := get("additional_disk_gb"):
+        if raw.isdigit() and catalog.additional_disk_min <= int(raw) <= catalog.additional_disk_max:
+            additional_disk = int(raw)
+        else:
+            errors["additional_disk_gb"] = (
+                f"Enter a size from {catalog.additional_disk_min} to {catalog.additional_disk_max} GB, or leave empty."
             )
-            break
-        data_disks.append(size)
+    disk_type = require("disk_type", catalog.ids(catalog.disk_types), "Choose a disk type.")
 
-    ip_mode = get("ip_mode") or "dhcp"
+    network = require("network", catalog.ids(catalog.networks), "Choose a network.")
+    vlan_id = get("vlan")
+    vlan = catalog.vlan(network, vlan_id)
+    if not vlan:
+        errors["vlan"] = "Choose a VLAN."
+
+    ip_assignment = require("ip_assignment", {"dhcp", "static"}, "Choose DHCP or static.")
     ip_address = gateway = ""
     prefix: int | None = None
-    dns: list[str] = []
-    if ip_mode not in ("dhcp", "static"):
-        errors["ip_mode"] = "Choose DHCP or static."
-    elif ip_mode == "static":
+    if ip_assignment == "static":
         try:
-            iface = ipaddress.IPv4Interface(f"{get('ip_address')}/{get('prefix_length') or 'x'}")
-            ip_address, prefix = str(iface.ip), iface.network.prefixlen
+            ip = ipaddress.IPv4Address(get("ip_address"))
+            ip_address = str(ip)
+            if vlan and vlan.network:
+                if ip not in vlan.network or ip in (vlan.network.network_address, vlan.network.broadcast_address):
+                    errors["ip_address"] = f"Must be a host address inside {vlan.network} ({vlan.label})."
+                prefix, gateway = vlan.network.prefixlen, vlan.gateway
+                if ip_address == gateway:
+                    errors["ip_address"] = "This is the VLAN gateway address."
         except ValueError:
-            errors["ip_address"] = "Enter a valid IPv4 address and prefix length (e.g. 24)."
-            iface = None
-        try:
-            gw = ipaddress.IPv4Address(get("gateway"))
-            gateway = str(gw)
-            if iface is not None and gw not in iface.network:
-                errors["gateway"] = f"Gateway must be inside {iface.network}."
-        except ValueError:
-            errors["gateway"] = "Enter a valid gateway IPv4 address."
-        for entry in re.split(r"[,\s]+", get("dns_servers")):
-            if not entry:
-                continue
-            try:
-                dns.append(str(ipaddress.IPv4Address(entry)))
-            except ValueError:
-                errors["dns_servers"] = f"'{entry}' is not a valid IPv4 address."
-                break
-        if not dns and "dns_servers" not in errors:
-            errors["dns_servers"] = "Enter at least one DNS server."
+            errors["ip_address"] = "Enter a valid IPv4 address."
 
+    # --- 4. Access & security ----------------------------------------------
     domain_join = get("domain_join") == "yes"
-    domain = get("domain")
-    ou_path = get("ou_path")
-    if domain_join and domain not in {d.id for d in catalog.domains}:
-        errors["domain"] = "Choose a domain."
+    domain = ""
+    if domain_join:
+        domain = require("domain", catalog.ids(catalog.domains), "Choose a domain.")
+    valid_groups = catalog.ids(catalog.ad_groups)
+    ad_groups = [g for g in form.getlist("ad_groups") if g in valid_groups]
+    chosen_security = set(form.getlist("security"))
+    security = {o.id: o.id in chosen_security for o in catalog.security_options}
 
-    application = get("application")
-    if not application:
-        errors["application"] = "Application / service name is required."
-    owner_email = get("owner_email")
-    if not EMAIL_RE.match(owner_email):
-        errors["owner_email"] = "Enter the owner's email address."
-    change_ticket = get("change_ticket")
+    # --- 5. Automation options ---------------------------------------------
+    chosen_automation = set(form.getlist("automation"))
+    automation = {o.id: o.id in chosen_automation for o in catalog.automation_options}
+    if automation.get("domain_join") and not domain_join:
+        errors["automation"] = "The Domain Join step is selected but Domain Join is set to No."
+
+    # --- 6. Approval / change information ----------------------------------
+    business_justification = require_text("business_justification", "Business justification", 2000)
+    change_ticket = optional_text("change_ticket", 32)
     if environment == "prod" and not change_ticket:
-        errors["change_ticket"] = "A change / ticket number is required for Production."
+        errors["change_ticket"] = "A change ticket is required for Production."
+    approver = require("approver", catalog.ids(catalog.approvers), "Choose an approver.")
 
-    for name, limit in (("application", 64), ("cost_center", 32), ("change_ticket", 32), ("ou_path", 256), ("notes", 1000)):
-        if len(get(name)) > limit:
-            errors[name] = f"At most {limit} characters."
+    planned = _date(get("planned_date"))
+    required_by = _date(get("required_by_date"))
+    if not planned:
+        errors["planned_date"] = "Choose a planned provisioning date."
+    elif planned < today:
+        errors["planned_date"] = "The planned date cannot be in the past."
+    if not required_by:
+        errors["required_by_date"] = "Choose the date the server is required by."
+    elif planned and required_by < planned:
+        errors["required_by_date"] = "Must be on or after the planned provisioning date."
+    comments = optional_text("comments", 2000)
 
     if errors:
         return None, errors
     return (
         ProvisionRequest(
-            platform=platform,
-            os_family=os_family,
-            os_image=os_image,
-            hostname=hostname,
+            requester_name=requester_name,
+            requester_email=requester_email,
+            department=department,
             environment=environment,
+            request_type=request_type,
+            source_server=source_server,
+            hostname=hostname,
+            platform=platform,
+            os=os_id,
+            os_family=os_family,
+            os_template=os_template,
             location=location,
-            network=network,
+            datacenter=datacenter,
+            server_role=server_role,
+            application=application,
+            business_owner=business_owner,
+            technical_owner=technical_owner,
             cpu=cpu,
-            memory_gb=memory,
-            os_disk_gb=os_disk,
-            data_disks_gb=data_disks,
-            ip_mode=ip_mode,
+            memory_gb=int(memory),
+            os_disk_gb=int(os_disk),
+            additional_disk_gb=additional_disk,
+            disk_type=disk_type,
+            network=network,
+            vlan=vlan_id,
+            ip_assignment=ip_assignment,
             ip_address=ip_address,
             prefix_length=prefix,
             gateway=gateway,
-            dns_servers=dns,
             domain_join=domain_join,
-            domain=domain if domain_join else "",
-            ou_path=ou_path if domain_join else "",
-            application=application,
-            owner_email=owner_email,
-            cost_center=get("cost_center"),
+            domain=domain,
+            ad_groups=ad_groups,
+            security=security,
+            automation=automation,
+            business_justification=business_justification,
             change_ticket=change_ticket,
-            notes=get("notes"),
-            requested_by=requested_by,
+            approver=approver,
+            planned_date=planned.isoformat(),
+            required_by_date=required_by.isoformat(),
+            comments=comments,
+            requested_by=requester_email,
         ),
         {},
     )

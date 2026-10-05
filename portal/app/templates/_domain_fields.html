@@ -1,7 +1,4 @@
-{% from "_macros.html" import select, text %}
+{% from "_macros.html" import select %}
 {% if v.get("domain_join") == "yes" %}
-<div class="grid">
-  <div>{{ select("domain", "Domain", catalog.domains, v, errors) }}</div>
-  <div>{{ text("ou_path", "OU path (optional)", v, errors, attrs='placeholder="OU=Servers,DC=corp,DC=example,DC=com"') }}</div>
-</div>
+  {{ select("domain", "Domain", catalog.domains, v, errors) }}
 {% endif %}

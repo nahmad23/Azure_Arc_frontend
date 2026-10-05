@@ -15,21 +15,37 @@ CATALOG = str(Path(__file__).resolve().parents[1] / "catalog.yaml")
 HX = {"HX-Request": "true"}
 
 VALID = {
-    "platform": "vmware",
-    "os_family": "linux",
-    "os_image": "tpl-rhel9",
-    "hostname": "app-web-01",
+    "requester_name": "Ahmad",
+    "requester_email": "ahmad@company.com",
+    "department": "infrastructure",
     "environment": "dev",
-    "location": "dc1-cluster01",
-    "network": "vlan110-app",
-    "cpu": "2",
-    "memory_gb": "8",
-    "os_disk_gb": "80",
-    "data_disk_gb": ["100", "200"],
-    "ip_mode": "dhcp",
-    "domain_join": "no",
-    "application": "Payroll",
-    "owner_email": "owner@example.com",
+    "request_type": "new",
+    "hostname": "UXUS1ARCWRK01",
+    "os": "rhel9",
+    "platform": "vmware",
+    "location": "us",
+    "datacenter": "us1",
+    "server_role": "application",
+    "application": "ARC",
+    "business_owner": "Application Team",
+    "technical_owner": "Unix Team",
+    "cpu": "4",
+    "memory_gb": "16",
+    "os_disk_gb": "100",
+    "additional_disk_gb": "200",
+    "disk_type": "ssd",
+    "network": "production",
+    "vlan": "vlan-110",
+    "ip_assignment": "dhcp",
+    "domain_join": "yes",
+    "domain": "unitedlex.global",
+    "ad_groups": ["GRP_ServerAdmin_Access"],
+    "security": ["monitoring", "backup"],
+    "automation": ["terraform_provisioning", "domain_join", "zabbix_agent"],
+    "business_justification": "New ARC worker node.",
+    "approver": "unix-lead",
+    "planned_date": "2099-01-10",
+    "required_by_date": "2099-01-20",
 }
 
 
@@ -50,74 +66,118 @@ def test_healthz(client):
     assert r.json()["status"] == "ok"
 
 
-def test_form_renders_with_catalog_choices(client):
+def post(client, **changes):
+    data = dict(VALID)
+    for k, v in changes.items():
+        if v is None:
+            data.pop(k, None)
+        else:
+            data[k] = v
+    return client.post("/requests", data=data, headers=HX)
+
+
+def test_form_renders_all_sections(client):
     r = client.get("/")
     assert r.status_code == 200
-    assert "Request a new server" in r.text
-    assert "VMware vSphere" in r.text and "SCVMM / Hyper-V" in r.text
-    assert "RHEL 9" in r.text  # linux images for the default platform
+    for title in ("Request Information", "Server Details", "Compute Resources",
+                  "Access &amp; Security", "Automation Options", "Approval / Change Information"):
+        assert title in r.text
+    for label in ("Requester Name", "Department", "Request Type", "Server Hostname", "Operating System",
+                  "Server Location", "Server Role", "Business Owner", "Technical Owner", "Disk Type",
+                  "IP Assignment", "AD Groups", "Business Justification", "Approver",
+                  "Planned Provisioning Date", "Required By Date", "Additional Comments"):
+        assert label in r.text, label
+    assert "VMware vSphere" in r.text and "Microsoft Hyper-V (SCVMM)" in r.text
+    assert "Zabbix Agent Installation" in r.text and "GRP_ServerAdmin_Access" in r.text
+    # automation steps default to checked
+    assert 'name="automation" value="patch_config" checked' in r.text
     assert "Dry-run mode" in r.text
 
 
-def test_platform_options_follow_platform_and_os(client):
-    r = client.get("/form/platform-options", params={"platform": "scvmm", "os_family": "windows"})
-    assert "vhdx-win2022" in r.text
-    assert "tpl-win2022" not in r.text
-    assert "hv-cloud-prod" in r.text
+def test_requester_fields_are_editable_when_sign_in_is_off(client):
+    r = client.get("/")
+    assert 'id="requester_name" name="requester_name" type="text" value=""' in r.text
+    assert 'readonly class="readonly"' not in r.text.split('id="requester_email"')[1].split(">")[0]
 
 
-def test_static_ip_fields_toggle(client):
-    assert 'name="gateway"' in client.get("/form/ip-fields", params={"ip_mode": "static"}).text
-    assert 'name="gateway"' not in client.get("/form/ip-fields", params={"ip_mode": "dhcp"}).text
+def test_dependent_fields(client):
+    assert ">UK1<" in client.get("/form/datacenters", params={"location": "uk"}).text
+    assert "US1" not in client.get("/form/datacenters", params={"location": "uk"}).text
+    vlans = client.get("/form/vlans", params={"network": "nonproduction"}).text
+    assert "VLAN-210" in vlans and "VLAN-110" not in vlans
+    assert 'name="cpu_custom"' in client.get("/form/cpu-custom", params={"cpu": "custom"}).text
+    assert 'name="cpu_custom"' not in client.get("/form/cpu-custom", params={"cpu": "4"}).text
+    static = client.get("/form/ip-fields", params={"ip_assignment": "static", "network": "production", "vlan": "vlan-110"}).text
+    assert 'name="ip_address"' in static and "10.192.10.0/24" in static
+    assert "Auto-generated" in client.get("/form/ip-fields", params={"ip_assignment": "dhcp"}).text
+    assert 'name="domain"' in client.get("/form/domain-fields", params={"domain_join": "yes"}).text
+    assert 'name="domain"' not in client.get("/form/domain-fields", params={"domain_join": "no"}).text
+    assert 'name="source_server"' in client.get("/form/source-server", params={"request_type": "clone"}).text
+    assert 'name="source_server"' not in client.get("/form/source-server", params={"request_type": "new"}).text
+
+
+def test_platform_table_follows_os_and_search(client):
+    r = client.get("/form/platforms", params={"os": "ubuntu2404"}).text
+    assert "tpl-ubuntu2404" in r
+    assert "No Ubuntu 24.04 template" in r  # SCVMM has no Ubuntu image -> row disabled
+    r = client.get("/form/platforms", params={"platform_q": "hyper"}).text
+    assert "Microsoft Hyper-V" in r and "VMware" not in r and "Found: 1 row" in r
 
 
 def test_hostname_check(client):
-    r = client.get("/form/check-hostname", params={"hostname": "averyverylongwinname", "os_family": "windows"})
+    r = client.get("/form/check-hostname", params={"hostname": "AVERYLONGWINDOWSNAME", "os": "win2022"})
     assert "at most 15" in r.text
-    r = client.get("/form/check-hostname", params={"hostname": "Bad_Name", "os_family": "linux"})
-    assert "Use lowercase" in r.text
+    r = client.get("/form/check-hostname", params={"hostname": "Bad_Name", "os": "rhel9"})
+    assert "letters, digits and hyphens" in r.text
 
 
 def test_submit_requires_htmx_header(client):
     assert client.post("/requests", data=VALID).status_code == 400
 
 
-def test_submit_validation_errors_are_shown(client):
-    data = dict(VALID, os_family="windows", os_image="tpl-win2022", hostname="this-name-is-too-long",
-                environment="prod", change_ticket="")
-    r = client.post("/requests", data=data, headers=HX)
-    assert r.status_code == 200
+def test_validation_errors_are_shown_and_values_kept(client):
+    r = post(client, os="win2022", hostname="UXUS1ARCWRKLONG01", environment="prod",
+             datacenter="uk1", required_by_date="2099-01-01", automation=["domain_join"], domain_join="no")
     assert "at most 15 characters" in r.text
-    assert "required for Production" in r.text
-    # entered values are kept
-    assert 'value="this-name-is-too-long"' in r.text
-    assert 'value="100"' in r.text
+    assert "change ticket is required for Production" in r.text
+    assert "Choose a datacenter" in r.text  # uk1 is not in the US
+    assert "on or after the planned" in r.text
+    assert "Domain Join step is selected" in r.text
+    assert 'value="UXUS1ARCWRKLONG01"' in r.text
+    assert 'name="ad_groups" value="GRP_ServerAdmin_Access" checked' in r.text
+    assert 'name="security" value="edr_av" checked' not in r.text  # unticked box stays unticked
 
 
-def test_static_ip_gateway_must_be_in_subnet(client):
-    data = dict(VALID, ip_mode="static", ip_address="10.1.2.10", prefix_length="24",
-                gateway="10.9.9.1", dns_servers="10.1.0.10")
-    r = client.post("/requests", data=data, headers=HX)
-    assert "Gateway must be inside 10.1.2.0/24" in r.text
+def test_os_must_exist_on_platform(client):
+    assert "Ubuntu 24.04 is not available on Microsoft Hyper-V" in post(client, os="ubuntu2404", platform="scvmm").text
 
 
-def test_image_must_match_platform(client):
-    data = dict(VALID, os_image="vhdx-rhel9")  # SCVMM image on VMware
-    assert "Choose an OS image" in client.post("/requests", data=data, headers=HX).text
+def test_static_ip_must_be_in_vlan(client):
+    assert "inside 10.192.10.0/24" in post(client, ip_assignment="static", ip_address="10.50.0.5").text
+    assert "VLAN gateway" in post(client, ip_assignment="static", ip_address="10.192.10.1").text
+
+
+def test_custom_cpu_and_dates(client):
+    assert "whole number from 1 to 64" in post(client, cpu="custom", cpu_custom="128").text
+    assert "cannot be in the past" in post(client, planned_date="2001-01-01").text
+
+
+def test_rebuild_needs_source_server(client):
+    assert "existing server to rebuild" in post(client, request_type="rebuild").text
 
 
 def test_dry_run_submit_and_status(client):
-    r = client.post("/requests", data=VALID, headers=HX)
+    r = post(client, cpu="custom", cpu_custom="6", ip_assignment="static", ip_address="10.192.10.25")
     assert r.status_code == 200
     assert "Request submitted" in r.text
-    assert "app-web-01" in r.text
-    assert "100, 200 GB" in r.text
+    assert "UXUS1ARCWRK01" in r.text
+    assert "6 vCPU" in r.text and "200 GB additional" in r.text
+    assert "10.192.10.25/24 via 10.192.10.1" in r.text
     statuses = [client.get("/requests/1/status").text for _ in range(3)]
     assert "running" in statuses[0]
     assert "succeeded" in statuses[-1]
     assert "hx-trigger" not in statuses[-1]  # polling stops once finished
-    runs = client.get("/requests")
-    assert "app-web-01" in runs.text
+    assert "UXUS1ARCWRK01" in client.get("/requests").text
 
 
 def test_anonymous_without_dry_run_is_refused():
@@ -146,7 +206,7 @@ def ado_settings(**kw) -> Settings:
 
 
 RUN_JSON = {
-    "id": 101, "name": "20261002.1_app-web-01", "state": "inProgress", "result": None,
+    "id": 101, "name": "20261002.1_UXUS1ARCWRK01", "state": "inProgress", "result": None,
     "createdDate": "2026-10-02T10:15:30.1234567Z",
     "_links": {"web": {"href": "https://dev.azure.com/contoso/Infra/_build/results?buildId=101"}},
 }
@@ -172,11 +232,14 @@ def test_ado_queue_run_request_shape():
     body = seen["body"]
     assert body["resources"]["repositories"]["self"]["refName"] == "refs/heads/main"
     params = body["templateParameters"]
-    assert params["platform"] == "vmware" and params["hostname"] == "app-web-01"
-    assert params["requestedBy"] == "anonymous"
+    assert params["platform"] == "vmware" and params["hostname"] == "UXUS1ARCWRK01"
+    assert params["osFamily"] == "linux" and params["requestType"] == "new"
+    assert params["requestedBy"] == "ahmad@company.com"
     assert all(isinstance(v, str) for v in params.values())
     req = json.loads(params["requestJson"])
-    assert req["data_disks_gb"] == [100, 200] and req["cpu"] == 2
+    assert req["cpu"] == 4 and req["additional_disk_gb"] == 200 and req["os_template"] == "tpl-rhel9"
+    assert req["automation"]["zabbix_agent"] is True and req["automation"]["patch_config"] is False
+    assert req["ad_groups"] == ["GRP_ServerAdmin_Access"] and req["datacenter"] == "us1"
 
 
 def test_ado_bad_pat_and_errors():
@@ -199,7 +262,7 @@ def test_ado_error_is_shown_on_form():
                                    ado=AdoClient(ado_settings(), transport=httpx.MockTransport(handler))))
     r = client.post("/requests", data=VALID, headers=HX)
     assert "could not be submitted" in r.text and "Unexpected parameter" in r.text
-    assert 'value="app-web-01"' in r.text
+    assert 'value="UXUS1ARCWRK01"' in r.text
 
 
 def test_ado_list_runs_sorted_and_parsed():
@@ -215,3 +278,19 @@ def test_ado_list_runs_sorted_and_parsed():
 def test_head_requests_for_monitoring(client):
     assert client.head("/").status_code == 200
     assert client.head("/healthz").status_code == 200
+
+
+def test_signed_in_identity_overrides_form():
+    from datetime import date
+
+    from starlette.datastructures import FormData
+
+    from app.catalog import load_catalog
+    from app.models import parse_request
+
+    items = [(k, x) for k, v in VALID.items() for x in (v if isinstance(v, list) else [v])]
+    items += [("requester_name", "Mallory"), ("requester_email", "mallory@evil.example")]
+    user = {"oid": "123", "name": "Ahmad", "email": "ahmad@company.com"}
+    req, errors = parse_request(FormData(items), load_catalog(CATALOG), user, today=date(2026, 10, 5))
+    assert errors == {}
+    assert (req.requester_name, req.requester_email, req.requested_by) == ("Ahmad", "ahmad@company.com", "ahmad@company.com")

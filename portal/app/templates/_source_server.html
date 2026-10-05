@@ -1,0 +1,6 @@
+{% from "_macros.html" import text %}
+{% if v.get("request_type") in ("rebuild", "clone") %}
+  {{ text("source_server", "Existing Server to " ~ ("Rebuild" if v.get("request_type") == "rebuild" else "Clone"),
+          v, errors, attrs='autocomplete="off" spellcheck="false"',
+          hint="Hostname of the server being " ~ ("rebuilt." if v.get("request_type") == "rebuild" else "cloned.")) }}
+{% endif %}

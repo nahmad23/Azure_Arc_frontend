@@ -1,27 +1,81 @@
+{# Field building blocks. Required fields get a red label, like the legend in the card header. #}
+
 {% macro field_error(errors, name) -%}
   {% if errors.get(name) %}<p class="field-error" id="{{ name }}-error">{{ errors[name] }}</p>{% endif %}
 {%- endmacro %}
 
-{% macro select(name, label, options, v, errors, attrs="", placeholder="Select…") -%}
-  <label for="{{ name }}">{{ label }}</label>
-  <select id="{{ name }}" name="{{ name }}" {{ attrs|safe }}
-          {% if errors.get(name) %}aria-invalid="true" aria-describedby="{{ name }}-error"{% endif %}>
-    {% if placeholder %}<option value="">{{ placeholder }}</option>{% endif %}
+{% macro label(name, text, required=True) -%}
+  <label for="{{ name }}" class="{{ 'req' if required else 'opt' }}">{{ text }}</label>
+{%- endmacro %}
+
+{% macro invalid(errors, name) -%}
+  {% if errors.get(name) %}aria-invalid="true" aria-describedby="{{ name }}-error"{% endif %}
+{%- endmacro %}
+
+{% macro select(name, text, options, v, errors, required=True, hint="", attrs="", placeholder="Select…") -%}
+  <div class="field">
+    {{ label(name, text, required) }}
+    <select id="{{ name }}" name="{{ name }}" {{ attrs|safe }} {{ invalid(errors, name) }}>
+      {% if placeholder %}<option value="">{{ placeholder }}</option>{% endif %}
+      {% for o in options %}
+        {% set oid = (o.id if o.id is defined else o)|string %}
+        {% set olabel = o.label if o.label is defined else o %}
+        <option value="{{ oid }}" {% if oid == (v.get(name) or "")|string %}selected{% endif %}>{{ olabel }}</option>
+      {% endfor %}
+    </select>
+    {% if hint %}<p class="hint">{{ hint }}</p>{% endif %}
+    {{ field_error(errors, name) }}
+  </div>
+{%- endmacro %}
+
+{% macro text(name, text, v, errors, required=True, type="text", hint="", attrs="", readonly=False) -%}
+  <div class="field">
+    {{ label(name, text, required) }}
+    <input id="{{ name }}" name="{{ name }}" type="{{ type }}" value="{{ v.get(name) or '' }}"
+           {{ attrs|safe }} {% if readonly %}readonly class="readonly"{% endif %} {{ invalid(errors, name) }}>
+    {% if hint %}<p class="hint">{{ hint }}</p>{% endif %}
+    {{ field_error(errors, name) }}
+  </div>
+{%- endmacro %}
+
+{% macro textarea(name, text, v, errors, required=True, hint="", rows=3, maxlength=2000) -%}
+  <div class="field span-all">
+    {{ label(name, text, required) }}
+    <textarea id="{{ name }}" name="{{ name }}" rows="{{ rows }}" maxlength="{{ maxlength }}" {{ invalid(errors, name) }}>{{ v.get(name) or "" }}</textarea>
+    {% if hint %}<p class="hint">{{ hint }}</p>{% endif %}
+    {{ field_error(errors, name) }}
+  </div>
+{%- endmacro %}
+
+{% macro toggle(name, text, choices, v, required=True, hint="", attrs="") -%}
+  <div class="field">
+    <span class="label {{ 'req' if required else 'opt' }}" id="{{ name }}-label">{{ text }}</span>
+    <div class="segmented" role="radiogroup" aria-labelledby="{{ name }}-label" {{ attrs|safe }}>
+      {% for value, caption in choices %}
+      <label><input type="radio" name="{{ name }}" value="{{ value }}" {% if v.get(name) == value %}checked{% endif %}><span>{{ caption }}</span></label>
+      {% endfor %}
+    </div>
+    {% if hint %}<p class="hint">{{ hint }}</p>{% endif %}
+  </div>
+{%- endmacro %}
+
+{% macro checks(name, options, v, errors, cls="") -%}
+  <div class="checks {{ cls }}">
     {% for o in options %}
-      {% set oid = o.id if o.id is defined else o %}
-      {% set olabel = o.label if o.label is defined else o %}
-      <option value="{{ oid }}" {% if oid|string == (v.get(name) or "")|string %}selected{% endif %}>{{ olabel }}</option>
+    <label class="check"><input type="checkbox" name="{{ name }}" value="{{ o.id }}" {% if o.id in (v.get(name) or []) %}checked{% endif %}>
+      <span>{{ o.label }}</span></label>
     {% endfor %}
-  </select>
+  </div>
   {{ field_error(errors, name) }}
 {%- endmacro %}
 
-{% macro text(name, label, v, errors, type="text", attrs="", hint="") -%}
-  <label for="{{ name }}">{{ label }}</label>
-  <input id="{{ name }}" name="{{ name }}" type="{{ type }}" value="{{ v.get(name) or '' }}" {{ attrs|safe }}
-         {% if errors.get(name) %}aria-invalid="true" aria-describedby="{{ name }}-error"{% endif %}>
-  {% if hint %}<p class="hint">{{ hint }}</p>{% endif %}
-  {{ field_error(errors, name) }}
+{% macro section(num, icon, title, subtitle="") -%}
+  <div class="section-head s{{ num }}">
+    <span class="section-num">{{ num }}</span>
+    <svg class="section-icon"><use href="#i-{{ icon }}"/></svg>
+    <span class="section-title">{{ title }}</span>
+    {% if subtitle %}<span class="section-sub">{{ subtitle }}</span>{% endif %}
+  </div>
 {%- endmacro %}
 
 {% macro status_badge(status) -%}

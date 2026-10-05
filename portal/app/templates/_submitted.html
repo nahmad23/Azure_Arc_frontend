@@ -1,19 +1,73 @@
-{% from "_macros.html" import status_badge %}
+{% from "_macros.html" import section %}
 <div class="card">
-  <h2>Request submitted</h2>
-  <p>The provisioning pipeline has been queued for <strong>{{ req.hostname }}</strong>.</p>
-  {% include "_run_status.html" %}
-  <table class="summary">
-    <tr><th>Platform</th><td>{{ catalog.platforms[req.platform].label }}</td></tr>
-    <tr><th>OS</th><td>{{ req.os_family|title }} · {{ req.os_image }}</td></tr>
-    <tr><th>Environment</th><td>{{ req.environment }}</td></tr>
-    <tr><th>Location / network</th><td>{{ req.location }} · {{ req.network }}</td></tr>
-    <tr><th>Size</th><td>{{ req.cpu }} vCPU · {{ req.memory_gb }} GB RAM · {{ req.os_disk_gb }} GB OS disk
-      {% if req.data_disks_gb %}· data disks {{ req.data_disks_gb|join(", ") }} GB{% endif %}</td></tr>
-    <tr><th>IP</th><td>{% if req.ip_mode == "static" %}{{ req.ip_address }}/{{ req.prefix_length }} via {{ req.gateway }}{% else %}DHCP{% endif %}</td></tr>
-    <tr><th>Domain</th><td>{{ req.domain or "none" }}</td></tr>
-    <tr><th>Application / owner</th><td>{{ req.application }} · {{ req.owner_email }}</td></tr>
-    <tr><th>Requested by</th><td>{{ req.requested_by }}</td></tr>
-  </table>
-  <p><a href="/">Request another server</a> · <a href="/requests">Recent requests</a></p>
+  <div class="card-head success-head">
+    <h1><svg><use href="#i-check"/></svg>Request submitted</h1>
+  </div>
+  <div class="card-body">
+    <p>The provisioning pipeline has been queued for <strong>{{ req.hostname }}</strong>.</p>
+    {% include "_run_status.html" %}
+
+    <section class="sec s1">
+    {{ section(1, "id", "Request Information") }}
+    <dl class="summary">
+      <dt>Requester</dt><dd>{{ req.requester_name }} &lt;{{ req.requester_email }}&gt;</dd>
+      <dt>Department</dt><dd>{{ catalog.label(catalog.departments, req.department) }}</dd>
+      <dt>Environment</dt><dd>{{ catalog.label(catalog.environments, req.environment) }}</dd>
+      <dt>Request type</dt><dd>{{ catalog.label(catalog.request_types, req.request_type) }}{% if req.source_server %} of {{ req.source_server }}{% endif %}</dd>
+    </dl>
+
+    </section>
+    <section class="sec s2">
+    {{ section(2, "server", "Server Details") }}
+    <dl class="summary">
+      <dt>Hostname</dt><dd>{{ req.hostname }}</dd>
+      <dt>Operating system</dt><dd>{{ catalog.os(req.os).label }} ({{ req.os_template }})</dd>
+      <dt>Infrastructure</dt><dd>{{ catalog.platforms[req.platform].label }}</dd>
+      <dt>Location / datacenter</dt><dd>{{ catalog.label(catalog.locations, req.location) }} / {{ catalog.label(catalog.datacenters(req.location), req.datacenter) }}</dd>
+      <dt>Role / application</dt><dd>{{ catalog.label(catalog.server_roles, req.server_role) }} · {{ req.application }}</dd>
+      <dt>Owners</dt><dd>Business: {{ req.business_owner }} · Technical: {{ req.technical_owner }}</dd>
+    </dl>
+
+    </section>
+    <section class="sec s3">
+    {{ section(3, "cpu", "Compute Resources") }}
+    <dl class="summary">
+      <dt>Size</dt><dd>{{ req.cpu }} vCPU · {{ req.memory_gb }} GB RAM · {{ req.os_disk_gb }} GB OS disk
+        {%- if req.additional_disk_gb %} · {{ req.additional_disk_gb }} GB additional{% endif %} ({{ catalog.label(catalog.disk_types, req.disk_type) }})</dd>
+      <dt>Network</dt><dd>{{ catalog.label(catalog.networks, req.network) }} · {{ catalog.vlan(req.network, req.vlan).label }}</dd>
+      <dt>IP</dt><dd>{% if req.ip_assignment == "static" %}{{ req.ip_address }}/{{ req.prefix_length }} via {{ req.gateway }}{% else %}DHCP (auto-generated){% endif %}</dd>
+    </dl>
+
+    </section>
+    <section class="sec s4">
+    {{ section(4, "shield", "Access & Security") }}
+    <dl class="summary">
+      <dt>Domain</dt><dd>{{ req.domain if req.domain_join else "Not joined" }}</dd>
+      <dt>AD groups</dt><dd>{{ req.ad_groups|join(", ") or "None" }}</dd>
+      <dt>Security</dt><dd>{% for o in catalog.security_options %}<span class="tag {{ 'on' if req.security[o.id] else 'off' }}">{{ o.label }}</span>{% endfor %}</dd>
+    </dl>
+
+    </section>
+    <section class="sec s5">
+    {{ section(5, "bolt", "Automation Options") }}
+    <dl class="summary">
+      <dt>Steps</dt><dd>{% for o in catalog.automation_options %}<span class="tag {{ 'on' if req.automation[o.id] else 'off' }}">{{ o.label }}</span>{% endfor %}</dd>
+    </dl>
+
+    </section>
+    <section class="sec s6">
+    {{ section(6, "check", "Approval / Change Information") }}
+    <dl class="summary">
+      <dt>Approver</dt><dd>{{ catalog.label(catalog.approvers, req.approver) }}</dd>
+      <dt>Change ticket</dt><dd>{{ req.change_ticket or "—" }}</dd>
+      <dt>Dates</dt><dd>Planned {{ req.planned_date }} · required by {{ req.required_by_date }}</dd>
+      <dt>Justification</dt><dd class="pre">{{ req.business_justification }}</dd>
+      {% if req.comments %}<dt>Comments</dt><dd class="pre">{{ req.comments }}</dd>{% endif %}
+    </dl>
+    </section>
+  </div>
+  <div class="card-foot">
+    <a class="btn btn-ghost" href="/requests">Recent requests</a>
+    <a class="btn btn-primary" href="/">Request another server</a>
+  </div>
 </div>

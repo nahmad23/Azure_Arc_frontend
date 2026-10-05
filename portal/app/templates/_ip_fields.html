@@ -1,11 +1,13 @@
 {% from "_macros.html" import text %}
-{% if v.get("ip_mode") == "static" %}
-<div class="grid grid-4">
-  <div>{{ text("ip_address", "IP address", v, errors, attrs='placeholder="10.192.10.25"') }}</div>
-  <div>{{ text("prefix_length", "Prefix length", v, errors, type="number", attrs='min="8" max="30" placeholder="24"') }}</div>
-  <div>{{ text("gateway", "Gateway", v, errors, attrs='placeholder="10.192.10.1"') }}</div>
-  <div>{{ text("dns_servers", "DNS servers", v, errors, attrs='placeholder="10.192.0.10, 10.192.0.11"') }}</div>
-</div>
+{% set vlan = catalog.vlan(v.get("network") or "", v.get("vlan") or "") %}
+{% if v.get("ip_assignment") == "static" %}
+  {{ text("ip_address", "IP Address", v, errors, attrs='placeholder="%s" autocomplete="off"'|format(
+          (vlan.network.network_address + 25)|string if vlan and vlan.network else "10.192.10.25"),
+          hint=("Manual. Must be inside %s, gateway %s."|format(vlan.network, vlan.gateway)) if vlan and vlan.network else "Manual. Choose the VLAN first.") }}
 {% else %}
-<p class="hint">The address is assigned by DHCP / IPAM on the selected network.</p>
+  <div class="field">
+    <label for="ip_address_auto" class="ro">IP Address</label>
+    <input id="ip_address_auto" type="text" value="Auto-generated (DHCP)" readonly class="readonly">
+    <p class="hint">Assigned automatically on the selected VLAN.</p>
+  </div>
 {% endif %}

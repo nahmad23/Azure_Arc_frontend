@@ -99,10 +99,12 @@ provision VMs anonymously. Phases 2 and 3 therefore go live together.
 
 ### 1. Edit the catalog
 
-Edit `portal/catalog.yaml` to list your environments, sizes, domains and, for each platform,
-its locations/clusters, networks, and Linux/Windows images. Each `id` is passed to Terraform,
-so use the values your Terraform code expects, such as the vSphere template name or the
-SCVMM VM template.
+Edit `portal/catalog.yaml`. It holds every dropdown and checkbox list on the form:
+departments, environments, request types, operating systems, platforms (with the template
+for each OS), locations and their datacenters, server roles, CPU/memory/disk sizes, networks
+and their VLANs (with subnet and gateway, used to check static IPs), domains, AD groups, the
+security and automation checkboxes, and approvers. Each `id` is passed to Terraform, so use
+the values your Terraform code expects, such as the vSphere template name.
 
 ### 2. Azure DevOps pipeline
 
@@ -127,11 +129,21 @@ SCVMM VM template.
 "write tfvars" step if they differ:
 
 ```
-platform, os_family, os_image, hostname, environment, location, network,
-cpu, memory_gb, os_disk_gb, data_disks_gb[], ip_mode, ip_address, prefix_length,
-gateway, dns_servers[], domain_join, domain, ou_path, application, owner_email,
-cost_center, change_ticket, notes, requested_by
+1 request:    requester_name, requester_email, department, environment, request_type, source_server
+2 server:     hostname, platform, os, os_family, os_template, location, datacenter, server_role,
+              application, business_owner, technical_owner
+3 compute:    cpu, memory_gb, os_disk_gb, additional_disk_gb, disk_type, network, vlan,
+              ip_assignment, ip_address, prefix_length, gateway
+4 security:   domain_join, domain, ad_groups[], security{monitoring, backup, vulnerability_scan,
+              ansible_hardening, edr_av}
+5 automation: automation{terraform_provisioning, ansible_hardening, domain_join, zabbix_agent,
+              monitoring_config, backup_config, security_baseline, patch_config}
+6 approval:   business_justification, change_ticket, approver, planned_date, required_by_date,
+              comments, requested_by
 ```
+
+The pipeline also gets `requestType` (new / rebuild / clone) as its own parameter, so it can
+choose a different flow for rebuilds and clones.
 
 ### 3. Entra ID sign-in
 

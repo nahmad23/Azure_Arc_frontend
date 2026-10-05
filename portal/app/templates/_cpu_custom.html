@@ -1,0 +1,6 @@
+{% from "_macros.html" import text %}
+{% if v.get("cpu") == "custom" %}
+  {{ text("cpu_custom", "Custom vCPU Count", v, errors, type="number",
+          attrs='min="%d" max="%d"'|format(catalog.custom_cpu_min, catalog.custom_cpu_max),
+          hint="%d to %d vCPU."|format(catalog.custom_cpu_min, catalog.custom_cpu_max)) }}
+{% endif %}

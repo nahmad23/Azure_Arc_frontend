@@ -75,14 +75,16 @@ class Run:
 def template_parameters(req: ProvisionRequest) -> dict[str, str]:
     """Pipeline parameters. Keep in sync with pipelines/provision-vm.yml.
 
-    The short fields drive the pipeline (run name, agent, approvals); the full
-    request goes in requestJson, which the pipeline writes to a tfvars file.
+    The short fields drive the pipeline (run name, agent, approvals, which
+    stages run); the full request goes in requestJson, which the pipeline
+    writes to a tfvars file.
     """
     return {
         "platform": req.platform,
         "osFamily": req.os_family,
         "hostname": req.hostname,
         "environment": req.environment,
+        "requestType": req.request_type,
         "requestedBy": req.requested_by,
         "requestJson": json.dumps(req.to_dict(), separators=(",", ":")),
     }

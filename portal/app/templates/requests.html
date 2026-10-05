@@ -1,7 +1,14 @@
 {% extends "base.html" %}
+{% set section = "requests" %}
 {% block content %}
-  <h1>Recent requests</h1>
-  <div id="runs" hx-get="/requests" hx-trigger="every 30s" hx-swap="innerHTML">
-    {% include "_runs_table.html" %}
+  <ol class="crumbs" aria-label="Breadcrumb">
+    <li><a href="/">Services</a></li>
+    <li class="current" aria-current="page"><svg><use href="#i-list"/></svg>Recent Requests</li>
+  </ol>
+  <div class="card">
+    <div class="card-head"><h1><svg><use href="#i-list"/></svg>Recent requests</h1></div>
+    <div class="card-body" id="runs" hx-get="/requests" hx-trigger="every 30s" hx-swap="innerHTML">
+      {% include "_runs_table.html" %}
+    </div>
   </div>
 {% endblock %}

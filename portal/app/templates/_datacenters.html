@@ -1,0 +1,3 @@
+{% from "_macros.html" import select %}
+{{ select("datacenter", "Datacenter", catalog.datacenters(v.get("location") or ""), v, errors,
+          placeholder="Select…" if v.get("location") else "Choose a location first") }}

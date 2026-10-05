@@ -59,7 +59,7 @@ azure_arc_tags: "Role=frontend,Service=nginx"
 # ---------------------------------------------------------------------------
 # When true, nginx sends all traffic to the portal instead of the static site.
 portal_enabled: true
-portal_app_title: "Server Provisioning Portal"
+portal_app_title: "Infrastructure Automation Portal"
 # Same value on both nodes (generated once on the controller and reused), so
 # sessions survive a VIP failover.
 portal_secret_key: "{{ lookup('ansible.builtin.password', playbook_dir + '/credentials/portal_secret_key', length=48, chars=['ascii_letters', 'digits']) }}"

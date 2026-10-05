@@ -1,9 +1,0 @@
-{% from "_macros.html" import select %}
-{% set platform = v.get("platform") or "" %}
-{% set fam = v.get("os_family") or "" %}
-<div class="grid grid-3">
-  <div>{{ select("os_image", "OS image", catalog.images(platform, fam), v, errors,
-                 placeholder="Select…" if fam else "Choose Linux or Windows first") }}</div>
-  <div>{{ select("location", "Location / cluster", catalog.locations(platform), v, errors) }}</div>
-  <div>{{ select("network", "Network", catalog.networks(platform), v, errors) }}</div>
-</div>

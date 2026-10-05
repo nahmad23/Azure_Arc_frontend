@@ -1,5 +1,9 @@
 # Example provisioning pipeline queued by the portal.
 #
+# requestJson also carries the user's "automation" choices (terraform_provisioning,
+# ansible_hardening, domain_join, zabbix_agent, ...): read them in later stages to
+# decide which post-build steps to run.
+#
 # The portal calls the Pipelines "Run" REST API with these parameters. Keep the
 # parameter names in sync with portal/app/ado.py (template_parameters).
 # Adapt the Terraform steps to your existing code layout, backend and agents.
@@ -20,7 +24,10 @@ parameters:
     type: string
   - name: environment
     type: string
-    values: [dev, test, uat, prod]
+    values: [prod, preprod, test, dev]
+  - name: requestType
+    type: string
+    values: [new, rebuild, clone]
   - name: requestedBy
     type: string
   - name: requestJson   # full validated request (JSON); written to request.auto.tfvars.json
@@ -50,7 +57,7 @@ stages:
           # script text, so user-entered values cannot inject shell commands.
           - bash: |
               set -euo pipefail
-              if [[ ! "$VM_HOSTNAME" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]]; then
+              if [[ ! "$VM_HOSTNAME" =~ ^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$ ]]; then
                 echo "##vso[task.logissue type=error]Invalid hostname: $VM_HOSTNAME"; exit 1
               fi
               printf '%s' "$REQUEST_JSON" | python3 -c '
@@ -59,7 +66,7 @@ stages:
               assert req["hostname"] == sys.argv[1], "hostname mismatch"
               json.dump(req, open("request.auto.tfvars.json", "w"), indent=2)
               ' "$VM_HOSTNAME"
-              echo "Requested by: $REQUESTED_BY"
+              echo "Requested by: $REQUESTED_BY ($REQUEST_TYPE)"
               cat request.auto.tfvars.json
             displayName: Validate request and write tfvars
             workingDirectory: $(tfDir)
@@ -67,6 +74,7 @@ stages:
               REQUEST_JSON: ${{ parameters.requestJson }}
               VM_HOSTNAME: ${{ parameters.hostname }}
               REQUESTED_BY: ${{ parameters.requestedBy }}
+              REQUEST_TYPE: ${{ parameters.requestType }}
 
           # One state file per VM so parallel requests never lock each other.
           - bash: |

@@ -1,0 +1,22 @@
+{% set q = (v.get("platform_q") or "")|lower %}
+{% set os_obj = catalog.os(v.get("os") or "") %}
+{% set rows = catalog.platforms.values()|selectattr("label")|list %}
+{% set shown = [] %}
+<table class="picker-table">
+  <thead><tr><th class="col-radio"></th><th>Infrastructure</th><th>Template</th></tr></thead>
+  <tbody>
+  {% for p in rows if not q or q in p.label|lower %}
+    {% set _ = shown.append(p) %}
+    {% set template = p.images.get(os_obj.id) if os_obj else none %}
+    {% set available = (not os_obj) or template %}
+    <tr class="{{ 'disabled' if not available }}">
+      <td class="col-radio"><input type="radio" name="platform" value="{{ p.id }}" id="platform-{{ p.id }}"
+          {% if v.get("platform") == p.id and available %}checked{% endif %} {% if not available %}disabled{% endif %}></td>
+      <td><label for="platform-{{ p.id }}">{{ p.label }}</label></td>
+      <td class="muted">{% if not os_obj %}Choose an OS{% elif template %}{{ template }}{% else %}No {{ os_obj.label }} template{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<div class="picker-foot"><span>Found: {{ shown|length }} row{{ "s" if shown|length != 1 }}</span>
+  <span>Showing {{ shown|length }} of {{ rows|length }}</span></div>

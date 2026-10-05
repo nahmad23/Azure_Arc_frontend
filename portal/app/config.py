@@ -12,7 +12,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="PORTAL_")
 
-    app_title: str = "Server Provisioning Portal"
+    app_title: str = "Infrastructure Automation Portal"
     catalog_path: str = "catalog.yaml"
 
     # Signs the session cookie. Must be identical on both nodes so a VIP

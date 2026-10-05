@@ -1,0 +1,4 @@
+{% from "_macros.html" import select %}
+{{ select("vlan", "VLAN", catalog.vlans(v.get("network") or ""), v, errors,
+          placeholder="Select…" if v.get("network") else "Choose a network first",
+          attrs='hx-get="/form/ip-fields" hx-target="#ip-fields" hx-include="[name=ip_assignment],[name=network],[name=vlan],[name=ip_address]"') }}

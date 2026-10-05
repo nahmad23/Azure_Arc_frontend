@@ -9,24 +9,44 @@
   <script src="/static/htmx.min.js" defer></script>
 </head>
 <body>
-  <header class="topbar">
-    <div class="topbar-inner">
-      <a class="brand" href="/">{{ settings.app_title }}</a>
-      <nav>
-        <a href="/">New request</a>
-        <a href="/requests">Recent requests</a>
-      </nav>
-      <div class="user">
-        {% if user %}{{ user.name or user.email }}{% if settings.auth_mode != "none" %} · <a href="/logout">Sign out</a>{% endif %}{% endif %}
+  {% include "_icons.html" %}
+  {% set section = section | default("services") %}
+  <nav class="sidebar" aria-label="Main">
+    <a href="/" class="side-item {{ 'active' if section == 'services' }}">
+      <svg><use href="#i-grid"/></svg><span>Services</span></a>
+    <a href="/requests" class="side-item {{ 'active' if section == 'requests' }}">
+      <svg><use href="#i-list"/></svg><span>Requests</span></a>
+    {% if user and settings.auth_mode != "none" %}
+    <a href="/logout" class="side-item side-bottom"><svg><use href="#i-signout"/></svg><span>Sign out</span></a>
+    {% endif %}
+  </nav>
+
+  <div class="shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Home">
+        <svg class="logo" viewBox="0 0 48 48" aria-hidden="true">
+          <circle cx="24" cy="24" r="6" fill="#d6452f"/>
+          <path d="M24 4v10M24 34v10M4 24h10M34 24h10M10 10l7 7M31 31l7 7M38 10l-7 7M17 31l-7 7"
+                stroke="#2f7fc1" stroke-width="4" stroke-linecap="round"/>
+        </svg>
+        <span class="brand-text">
+          <span class="brand-title">{{ settings.app_title }}</span>
+          <span class="brand-sub">Welcome to the {{ settings.app_title }}</span>
+        </span>
+      </a>
+      <div class="top-actions">
+        {% if user %}<span class="who"><svg><use href="#i-user"/></svg>{{ user.email if user.email != "anonymous" else user.name }}</span>{% endif %}
       </div>
-    </div>
-  </header>
-  {% if settings.dry_run %}
-  <div class="banner">Dry-run mode: requests are validated but no pipeline is queued and nothing is provisioned.</div>
-  {% endif %}
-  <main class="container">
-    {% block content %}{% endblock %}
-  </main>
-  <footer class="footer">Served by {{ node }}</footer>
+    </header>
+
+    {% if settings.dry_run %}
+    <div class="banner">Dry-run mode: requests are validated but no pipeline is queued and nothing is provisioned.</div>
+    {% endif %}
+
+    <main class="container">
+      {% block content %}{% endblock %}
+    </main>
+    <footer class="footer">Served by {{ node }}</footer>
+  </div>
 </body>
 </html>
