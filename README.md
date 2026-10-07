@@ -8,6 +8,10 @@ The frontend is the **Server Provisioning Portal** (FastAPI + HTMX): a self-serv
 form that queues an Azure DevOps pipeline, which runs Terraform to build Linux and
 Windows VMs on VMware and SCVMM/Hyper-V. See [`portal/README.md`](portal/README.md).
 
+**Operations guide:** [`docs/Infrastructure_Automation_Portal_SOP.docx`](docs/Infrastructure_Automation_Portal_SOP.docx)
+is the Word solution document with step-by-step SOPs: deployment, health checks, failover tests,
+changing the homepage and form, go-live, troubleshooting and rollback.
+
 ```
                     clients / DNS (app.example.com -> VIP)
                                    |
