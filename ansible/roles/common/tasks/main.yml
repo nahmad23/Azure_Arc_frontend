@@ -16,7 +16,7 @@
 - name: Open firewall (firewalld)
   when:
     - manage_firewall | bool
-    - ansible_os_family == "RedHat"
+    - ansible_facts['os_family'] == "RedHat"
   block:
     - name: Ensure firewalld is running
       ansible.builtin.service:
@@ -42,7 +42,7 @@
 - name: Open firewall (ufw)
   when:
     - manage_firewall | bool
-    - ansible_os_family == "Debian"
+    - ansible_facts['os_family'] == "Debian"
   block:
     - name: Install ufw
       ansible.builtin.apt:
@@ -74,6 +74,6 @@
         marker: "# {mark} frontend-ha VRRP"
         block: |
           {% for peer in groups['frontend'] | difference([inventory_hostname]) %}
-          -A ufw-before-input -p 112 -s {{ hostvars[peer].ansible_default_ipv4.address }} -j ACCEPT
+          -A ufw-before-input -p 112 -s {{ hostvars[peer]['ansible_facts']['default_ipv4'].address }} -j ACCEPT
           {% endfor %}
       notify: Reload ufw

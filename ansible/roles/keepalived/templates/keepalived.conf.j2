@@ -29,10 +29,10 @@ vrrp_instance FRONTEND_VIP {
     }
 
 {% if keepalived_unicast | bool %}
-    unicast_src_ip {{ ansible_default_ipv4.address }}
+    unicast_src_ip {{ ansible_facts['default_ipv4'].address }}
     unicast_peer {
 {% for peer in groups['frontend'] | difference([inventory_hostname]) %}
-        {{ hostvars[peer].ansible_default_ipv4.address }}
+        {{ hostvars[peer]['ansible_facts']['default_ipv4'].address }}
 {% endfor %}
     }
 

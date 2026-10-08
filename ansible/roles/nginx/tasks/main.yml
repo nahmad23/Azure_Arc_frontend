@@ -3,20 +3,20 @@
   ansible.builtin.dnf:
     name: nginx
     state: present
-  when: ansible_os_family == "RedHat"
+  when: ansible_facts['os_family'] == "RedHat"
 
 - name: Install nginx (Debian family)
   ansible.builtin.apt:
     name: nginx
     state: present
     update_cache: true
-  when: ansible_os_family == "Debian"
+  when: ansible_facts['os_family'] == "Debian"
 
 - name: Remove distro default site (Debian family)
   ansible.builtin.file:
     path: /etc/nginx/sites-enabled/default
     state: absent
-  when: ansible_os_family == "Debian"
+  when: ansible_facts['os_family'] == "Debian"
   notify: Reload nginx
 
 # Our site is the default_server; drop that flag from the distro's sample server.
@@ -25,7 +25,7 @@
     path: /etc/nginx/nginx.conf
     regexp: '(listen\s+\S+)\s+default_server;'
     replace: '\g<1>;'
-  when: ansible_os_family == "RedHat"
+  when: ansible_facts['os_family'] == "RedHat"
   notify: Reload nginx
 
 - name: Allow nginx to proxy to the backend (SELinux)
@@ -35,8 +35,8 @@
     persistent: true
   when:
     - backend_servers | length > 0
-    - ansible_selinux is defined
-    - ansible_selinux.status | default('disabled') == "enabled"
+    - ansible_facts['selinux'] is defined
+    - ansible_facts['selinux'].status | default('disabled') == "enabled"
 
 - name: Create web root
   ansible.builtin.file:
@@ -58,8 +58,8 @@
 - name: Restore SELinux context on web root
   ansible.builtin.command: restorecon -R {{ nginx_web_root }}
   when:
-    - ansible_selinux is defined
-    - ansible_selinux.status | default('disabled') == "enabled"
+    - ansible_facts['selinux'] is defined
+    - ansible_facts['selinux'].status | default('disabled') == "enabled"
   changed_when: false
 
 - name: Deploy TLS certificate and key

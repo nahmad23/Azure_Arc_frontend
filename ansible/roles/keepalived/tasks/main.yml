@@ -6,7 +6,7 @@
 
 - name: Resolve VRRP interface
   ansible.builtin.set_fact:
-    keepalived_iface: "{{ keepalived_interface | default('', true) or ansible_default_ipv4.interface }}"
+    keepalived_iface: "{{ keepalived_interface | default('', true) or ansible_facts['default_ipv4'].interface }}"
 
 - name: Install nginx health-check script
   ansible.builtin.template:

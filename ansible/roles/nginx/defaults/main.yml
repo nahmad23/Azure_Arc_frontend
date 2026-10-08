@@ -2,4 +2,4 @@
 nginx_site_file: /etc/nginx/conf.d/frontend.conf
 nginx_tls_dir: /etc/nginx/tls
 # Only add [::] listeners when the node actually has IPv6 (nginx fails otherwise).
-nginx_listen_ipv6: "{{ ansible_all_ipv6_addresses | default([]) | length > 0 }}"
+nginx_listen_ipv6: "{{ ansible_facts['all_ipv6_addresses'] | default([]) | length > 0 }}"
